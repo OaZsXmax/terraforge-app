@@ -1,26 +1,55 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #061410;
+  --foreground: #ecfff8;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+/* ---- Mobile-first reset ---------------------------------- */
+*, *::before, *::after {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  overflow-x: hidden;
+  width: 100%;
+  height: 100%;
+  /* Prevent font size inflation on mobile */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+  overflow-x: hidden;
+  width: 100%;
+  min-height: 100%;
+  /* Smooth scrolling on iOS */
+  -webkit-overflow-scrolling: touch;
+}
+
+/* ---- Prevent horizontal overflow from any child ---------- */
+#__next,
+[data-nextjs-scroll-focus-boundary] {
+  overflow-x: hidden;
+  width: 100%;
+}
+
+/* ---- Fix touch scrolling in Android WebView -------------- */
+* {
+  touch-action: pan-y pinch-zoom;
+}
+
+/* ---- Remove tap delay on Android ------------------------- */
+a, button, [role="button"] {
+  touch-action: manipulation;
+}
+
+/* ---- Ensure images don't overflow ------------------------ */
+img, video {
+  max-width: 100%;
+  height: auto;
 }

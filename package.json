@@ -5,13 +5,30 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "build:mobile": "node build-mobile.js",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "android": "npm run build:mobile && npx cap sync android && npx cap open android"
   },
   "dependencies": {
-    "next": "16.2.3",
-    "react": "19.2.4",
-    "react-dom": "19.2.4"
+    "@capacitor/android": "^8.3.1",
+    "@capacitor/cli": "^8.3.1",
+    "@capacitor/core": "^8.3.1",
+    "@capacitor/ios": "^8.3.1",
+    "@hookform/resolvers": "^5.2.2",
+    "@next/third-parties": "^16.2.6",
+    "@sentry/nextjs": "^10.55.0",
+    "@stripe/stripe-js": "^9.4.0",
+    "@supabase/ssr": "^0.10.3",
+    "@supabase/supabase-js": "^2.105.4",
+    "date-fns": "^4.1.0",
+    "lucide-react": "^1.8.0",
+    "next": "^16.2.6",
+    "react": "^19.2.6",
+    "react-dom": "^19.2.6",
+    "react-hook-form": "^7.72.1",
+    "stripe": "^22.1.1",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
@@ -19,7 +36,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
-    "eslint-config-next": "16.2.3",
+    "eslint-config-next": "^16.2.6",
     "tailwindcss": "^4",
     "typescript": "^5"
   }
