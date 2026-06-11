@@ -8894,7 +8894,7 @@ export default function TerraForgeHome(){
                       background:'linear-gradient(135deg,rgba(255,176,32,0.20),rgba(255,176,32,0.08))',
                       border:'1.5px solid rgba(255,176,32,0.40)',color:'#ffb020',
                       fontSize:14,fontWeight:700,fontFamily:"'Space Grotesk',sans-serif",
-                      boxShadow:'0 4px 20px rgba(255,176,32,0.12)"}}>
+                      boxShadow:'0 4px 20px rgba(255,176,32,0.12)'}}>
                     Unlock Property Analysis →
                   </button>
                 </div>
