@@ -9134,8 +9134,8 @@ export default function TerraForgeHome(){
                 </div>
               )}
 
-            </div>
             </>}
+            </div>
           )}
 
           {activeTab==='deploy'&&(
