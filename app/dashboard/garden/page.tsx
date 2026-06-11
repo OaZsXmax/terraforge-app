@@ -3163,7 +3163,7 @@ function SeasonalCalendar({zone,userTiles}:{zone:string;userTiles:string[]}){
             </div>
             {/* Month grid */}
             <div style={{overflowX:'auto',paddingBottom:4}}>
-              <table style={{width:'100%',borderCollapse:'separate',borderSpacing:'2px 2px',minWidth:480}}>
+              <table style={{width:'100%',minWidth:320,borderCollapse:'separate',borderSpacing:'2px 2px'}}>
                 <thead>
                   <tr>
                     <td style={{width:90,fontSize:9,color:'var(--ts)',fontFamily:"'JetBrains Mono',monospace",
@@ -8119,7 +8119,7 @@ export default function TerraForgeHome(){
                   right={`${displayCalc.featureBreakdown.length} types · ${allTiles.length} total`}/>
                 <Card>
                   <div style={{overflowX:'auto',WebkitOverflowScrolling:'touch'}}>
-                    <table style={{width:isMobile?'420px':'100%',borderCollapse:'collapse'}}>
+                    <table style={{width:'100%',borderCollapse:'collapse'}}>
                       <thead>
                         <tr style={{background:'rgba(0,255,170,0.025)'}}>
                           {(isMobile?['Feature','CO₂ lbs','$/yr']:['Feature','Qty','Yield (lbs)','Water (gal)','CO₂ (lbs)','Est. Cost','Annual Value']).map((h,i)=>(
