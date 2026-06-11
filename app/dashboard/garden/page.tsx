@@ -6488,7 +6488,7 @@ export default function TerraForgeHome(){
             <div style={{display:'flex',alignItems:'center',gap:2,flex:1,padding:'0 4px',overflowX:'auto'}}>
               {TABS.map(({id,label,Icon})=>{
                 const on=activeTab===id;
-                const proOnly=!isPro&&(id==='roi'||id==='deploy'||id==='blueprints'||id==='calendar');
+                const proOnly=!isPro&&(id==='roi'||id==='deploy'||id==='blueprints'||id==='calendar'||id==='property');
                 return(
                   <button key={id} onClick={()=>{setActiveTab(id);window.scrollTo({top:0,behavior:'smooth'});}}
                     style={{
@@ -6702,7 +6702,7 @@ export default function TerraForgeHome(){
           }}>
             {TABS.map(({id,label,Icon})=>{
               const on=activeTab===id;
-              const proOnly=!isPro&&(id==='roi'||id==='deploy'||id==='blueprints'||id==='calendar');
+              const proOnly=!isPro&&(id==='roi'||id==='deploy'||id==='blueprints'||id==='calendar'||id==='property');
               return(
                 <button key={id} onClick={()=>{setActiveTab(id);window.scrollTo({top:0,behavior:'smooth'});}}
                   style={{
