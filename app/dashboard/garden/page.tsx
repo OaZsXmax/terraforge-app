@@ -8889,14 +8889,11 @@ export default function TerraForgeHome(){
                     fontFamily:"'Inter',sans-serif"}}>
                     Enter your address and get a satellite view of your property with AI-powered analysis — lot size, orientation, existing trees, and more. Upgrade to Pro to unlock.
                   </p>
-                  <button type="button" onClick={()=>requirePro('Property Analysis')}
-                    style={{padding:'14px 32px',borderRadius:14,cursor:'pointer',
-                      background:'linear-gradient(135deg,rgba(255,176,32,0.20),rgba(255,176,32,0.08))',
-                      border:'1.5px solid rgba(255,176,32,0.40)',color:'#ffb020',
-                      fontSize:14,fontWeight:700,fontFamily:"'Space Grotesk',sans-serif",
-                      boxShadow:'0 4px 20px rgba(255,176,32,0.12)'}}>
-                    Unlock Property Analysis →
-                  </button>
+                  <button onClick={handleDirectUpgrade} style={{
+                    background:'linear-gradient(135deg,#ffb020,#f97316)',border:'none',borderRadius:12,
+                    color:'#1a0a00',fontSize:14,fontWeight:800,padding:'13px 32px',cursor:'pointer',
+                    letterSpacing:'.06em',fontFamily:"'Courier New',monospace",
+                  }}>Upgrade to Pro — $9/mo</button>
                 </div>
               )}
 
