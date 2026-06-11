@@ -8876,6 +8876,31 @@ export default function TerraForgeHome(){
           {activeTab==='property'&&(
             <div className="a-fadeUp" style={{display:'flex',flexDirection:'column',gap:20}}>
 
+              {/* Pro gate */}
+              {!isPro&&(
+                <div style={{padding:'64px 32px',textAlign:'center',borderRadius:24,
+                  background:'linear-gradient(135deg,rgba(255,176,32,0.05),rgba(4,14,8,0.90))',
+                  border:'1px solid rgba(255,176,32,0.15)'}}>
+                  <div style={{fontSize:42,marginBottom:16}}>🛰️</div>
+                  <h2 style={{fontSize:22,fontWeight:700,color:'#ffb020',margin:'0 0 10px',
+                    fontFamily:"'Space Grotesk',sans-serif"}}>Property Analysis</h2>
+                  <p style={{fontSize:14,color:'rgba(200,230,212,0.55)',margin:'0 0 28px',
+                    lineHeight:1.7,maxWidth:400,marginLeft:'auto',marginRight:'auto',
+                    fontFamily:"'Inter',sans-serif"}}>
+                    Enter your address and get a satellite view of your property with AI-powered analysis — lot size, orientation, existing trees, and more. Upgrade to Pro to unlock.
+                  </p>
+                  <button type="button" onClick={()=>requirePro('Property Analysis')}
+                    style={{padding:'14px 32px',borderRadius:14,cursor:'pointer',
+                      background:'linear-gradient(135deg,rgba(255,176,32,0.20),rgba(255,176,32,0.08))',
+                      border:'1.5px solid rgba(255,176,32,0.40)',color:'#ffb020',
+                      fontSize:14,fontWeight:700,fontFamily:"'Space Grotesk',sans-serif",
+                      boxShadow:'0 4px 20px rgba(255,176,32,0.12)"}}>
+                    Unlock Property Analysis →
+                  </button>
+                </div>
+              )}
+
+              {isPro&&<>
               {/* Header */}
               <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',flexWrap:'wrap',gap:12}}>
                 <div>
@@ -9108,6 +9133,9 @@ export default function TerraForgeHome(){
                   </p>
                 </div>
               )}
+
+            </div>
+              </>}
 
             </div>
           )}
