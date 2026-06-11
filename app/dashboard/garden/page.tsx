@@ -5531,7 +5531,7 @@ export default function TerraForgeHome(){
     if(!saved){
       return;
     }
-    if(saved.apiBlueprint){setApiBlueprint(saved.apiBlueprint);setFormOpen(false);}
+    if(saved.apiBlueprint){setApiBlueprint(saved.apiBlueprint);setFormOpen(true);}
     if(saved.blueprints?.length>0){
       let bps:Blueprint[]=saved.blueprints.map((b:any)=>({
         ...b,
@@ -5594,6 +5594,8 @@ export default function TerraForgeHome(){
     }
     if(saved.formValues)reset(saved.formValues);
     if(saved.wOrder&&Array.isArray(saved.wOrder)&&saved.wOrder.length>0)setWOrder(saved.wOrder);
+    // Open form panel for returning users so they land in an active state
+    setFormOpen(true);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   },[]);
 
