@@ -5416,6 +5416,10 @@ export default function TerraForgeHome(){
   const [shareToast, setShareToast] = useState<string|null>(null);
   const [budgetWarned, setBudgetWarned] = useState(false);
   const [pendingBudgetAdd, setPendingBudgetAdd] = useState<string|null>(null);
+  const [propertyAddress, setPropertyAddress] = useState('');
+  const [propertyAnalysing, setPropertyAnalysing] = useState(false);
+  const [propertyData, setPropertyData] = useState<{address:string;lat:number;lng:number;satelliteUrl:string;analysis:any}|null>(null);
+  const [propertyError, setPropertyError] = useState('');
 
   // Direct upgrade - goes straight to checkout or login
   const handleDirectUpgrade = () => {
@@ -6248,6 +6252,33 @@ export default function TerraForgeHome(){
     }
     exportAsPDF(blueprints,calc,fv,apiBlueprint);
   };
+  // ── Property analysis from address ──
+  const analyseProperty=async()=>{
+    if(!propertyAddress.trim()){setPropertyError('Please enter a property address.');return;}
+    setPropertyAnalysing(true);setPropertyError('');
+    try{
+      const res=await fetch('/api/analyse-property',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({address:propertyAddress.trim()}),
+      });
+      const d=await res.json();
+      if(!res.ok){setPropertyError(d.error||'Could not analyse property.');setPropertyAnalysing(false);return;}
+      setPropertyData(d);
+      // Auto-fill form with real property data
+      if(d.analysis.totalSqFt)setValue('yardSqFt',d.analysis.totalSqFt,{shouldValidate:true});
+      if(d.analysis.climateHint)setValue('climateZone',d.analysis.climateHint,{shouldValidate:true});
+      // Show a success toast
+      const t=document.createElement('div');
+      t.style.cssText='position:fixed;top:20px;left:50%;transform:translateX(-50%);background:#0d2418;color:#00ffaa;border:1px solid rgba(0,255,170,0.35);border-radius:12px;padding:12px 24px;font-size:13px;font-weight:600;z-index:99999;pointer-events:none;max-width:480px;text-align:center;';
+      t.textContent=`✓ Property analysed — ${d.analysis.totalSqFt?.toLocaleString()} sq ft detected. Form updated.`;
+      document.body.appendChild(t);setTimeout(()=>t.remove(),4000);
+    }catch(e:any){
+      setPropertyError('Analysis failed — please check your address and try again.');
+    }
+    setPropertyAnalysing(false);
+  };
+
   const shareBlueprint=()=>{
     if(!hasData)return;
     // Build a compact shareable state: form values + tile counts only
@@ -6735,6 +6766,45 @@ export default function TerraForgeHome(){
                       <span style={{fontSize:12,fontWeight:700,letterSpacing:'.06em',color:'var(--td)',
                         fontFamily:"'Space Grotesk',sans-serif"}}>Property</span>
                     </div>
+
+                    {/* ── Address analyser ── */}
+                    <div style={{marginBottom:16,padding:'14px 16px',borderRadius:12,
+                      background:'rgba(0,255,170,0.04)',border:'1px solid rgba(0,255,170,0.12)'}}>
+                      <div style={{fontSize:10,letterSpacing:'.12em',color:'var(--tf)',fontFamily:"'JetBrains Mono',monospace",
+                        textTransform:'uppercase',marginBottom:8,fontWeight:700}}>📍 Auto-detect from address</div>
+                      <div style={{display:'flex',gap:8}}>
+                        <input
+                          type="text"
+                          value={propertyAddress}
+                          onChange={e=>setPropertyAddress(e.target.value)}
+                          onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();analyseProperty();}}}
+                          placeholder="123 Main St, Portland, OR..."
+                          className="tf-in"
+                          style={{flex:1,padding:'8px 12px',borderRadius:9,fontSize:12,
+                            fontFamily:"'Inter',sans-serif",
+                            background:'rgba(0,255,170,0.03)',border:'1px solid rgba(0,255,170,0.12)',
+                            color:'var(--tp)'}}
+                        />
+                        <button type="button" onClick={analyseProperty} disabled={propertyAnalysing}
+                          style={{padding:'8px 14px',borderRadius:9,cursor:propertyAnalysing?'wait':'pointer',
+                            background:propertyAnalysing?'rgba(0,255,170,0.05)':'rgba(0,255,170,0.12)',
+                            border:'1px solid rgba(0,255,170,0.25)',color:'var(--tf)',
+                            fontSize:11,fontWeight:700,fontFamily:"'Space Grotesk',sans-serif",
+                            whiteSpace:'nowrap',transition:'all 0.2s'}}>
+                          {propertyAnalysing?'Analysing…':'Analyse →'}
+                        </button>
+                      </div>
+                      {propertyError&&<p style={{fontSize:10,color:'var(--red)',marginTop:6,
+                        fontFamily:"'JetBrains Mono',monospace"}}>{propertyError}</p>}
+                      {propertyData&&!propertyError&&(
+                        <p style={{fontSize:10,color:'rgba(0,255,170,0.60)',marginTop:6,
+                          fontFamily:"'Inter',sans-serif",lineHeight:1.5}}>
+                          ✓ {propertyData.address} · {propertyData.analysis.confidence} confidence
+                          {propertyData.analysis.orientation&&` · ${propertyData.analysis.orientation}`}
+                        </p>
+                      )}
+                    </div>
+
                     <div style={{display:'flex',flexDirection:'column',gap:16}}>
                       {([
                         {label:'Area (sq ft)',  key:'yardSqFt'   as const,min:500,  max:200000,step:500},
@@ -7397,6 +7467,75 @@ export default function TerraForgeHome(){
               )}
 
               {/* -- GENERATED STATE — BENTO GRID -- */}
+              {/* ── Satellite property view ── */}
+              {propertyData&&hasData&&(
+                <div className="a-fadeUp" style={{
+                  borderRadius:20,overflow:'hidden',
+                  border:'1px solid rgba(0,255,170,0.14)',
+                  background:'rgba(4,14,8,0.85)',
+                  marginBottom:0,
+                }}>
+                  <div style={{padding:'14px 20px',display:'flex',alignItems:'center',justifyContent:'space-between',
+                    borderBottom:'1px solid rgba(0,255,170,0.08)'}}>
+                    <div style={{display:'flex',alignItems:'center',gap:10}}>
+                      <div style={{width:7,height:7,borderRadius:'50%',background:'#00ffaa',boxShadow:'0 0 8px #00ffaa'}}/>
+                      <span style={{fontSize:11,fontWeight:700,letterSpacing:'.10em',color:'var(--tf)',
+                        fontFamily:"'Space Grotesk',sans-serif",textTransform:'uppercase'}}>Your Property</span>
+                      <span style={{fontSize:10,color:'var(--ts)',fontFamily:"'JetBrains Mono',monospace"}}>
+                        · {propertyData.analysis.totalSqFt?.toLocaleString()} sq ft · {propertyData.analysis.confidence} confidence
+                      </span>
+                    </div>
+                    <button type="button" onClick={()=>setPropertyData(null)}
+                      style={{background:'none',border:'none',color:'var(--ts)',cursor:'pointer',fontSize:16,lineHeight:1}}>×</button>
+                  </div>
+                  <div style={{display:'flex',gap:0,flexWrap:'wrap'}}>
+                    {/* Satellite image */}
+                    <div style={{flex:'0 0 280px',position:'relative'}}>
+                      <img src={propertyData.satelliteUrl} alt="Satellite view"
+                        style={{width:'100%',height:280,objectFit:'cover',display:'block'}}/>
+                      <div style={{position:'absolute',bottom:8,left:8,background:'rgba(4,14,8,0.85)',
+                        borderRadius:6,padding:'3px 8px',fontSize:10,color:'var(--tf)',
+                        fontFamily:"'JetBrains Mono',monospace",border:'1px solid rgba(0,255,170,0.20)'}}>
+                        📍 Satellite · Zoom 19
+                      </div>
+                    </div>
+                    {/* Property facts */}
+                    <div style={{flex:1,minWidth:200,padding:'16px 20px',display:'flex',flexDirection:'column',gap:10}}>
+                      <div style={{fontSize:12,fontWeight:700,color:'var(--tp)',fontFamily:"'Space Grotesk',sans-serif",
+                        marginBottom:4,lineHeight:1.4}}>{propertyData.address}</div>
+                      {[
+                        ['Total area',`${propertyData.analysis.totalSqFt?.toLocaleString()} sq ft`],
+                        ['Usable garden',`${propertyData.analysis.usableGardenSqFt?.toLocaleString()} sq ft`],
+                        ['Orientation',propertyData.analysis.orientation],
+                        ['Existing trees',propertyData.analysis.existingTreeCount],
+                        ['Has pool',propertyData.analysis.hasPool?'Yes':'No'],
+                        ['Has fence',propertyData.analysis.hasFence?'Yes':'No'],
+                      ].map(([label,value])=>(
+                        <div key={String(label)} style={{display:'flex',justifyContent:'space-between',
+                          borderBottom:'1px solid rgba(0,255,170,0.05)',paddingBottom:6}}>
+                          <span style={{fontSize:11,color:'var(--ts)',fontFamily:"'Inter',sans-serif"}}>{label}</span>
+                          <span style={{fontSize:11,color:'var(--tp)',fontFamily:"'Space Grotesk',sans-serif",
+                            fontWeight:600}}>{String(value??'—')}</span>
+                        </div>
+                      ))}
+                      {propertyData.analysis.existingFeatures?.length>0&&(
+                        <div>
+                          <div style={{fontSize:10,color:'var(--ts)',fontFamily:"'JetBrains Mono',monospace",
+                            letterSpacing:'.08em',marginBottom:6,textTransform:'uppercase'}}>Detected features</div>
+                          <div style={{display:'flex',flexWrap:'wrap',gap:5}}>
+                            {propertyData.analysis.existingFeatures.slice(0,6).map((f:string)=>(
+                              <span key={f} style={{fontSize:10,padding:'2px 8px',borderRadius:99,
+                                background:'rgba(0,255,170,0.07)',border:'1px solid rgba(0,255,170,0.15)',
+                                color:'var(--tf)',fontFamily:"'Inter',sans-serif"}}>{f}</span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {hasData&&<BentoGrid
   calc={displayCalc}
   allTiles={allTiles}

@@ -73,6 +73,10 @@ export async function POST(req: NextRequest) {
       subscription_data: {
         metadata: { supabase_user_id: userId },
       },
+      // ── Global billing additions ──
+      automatic_tax: { enabled: true },       // calculates VAT/GST per country automatically
+      allow_promotion_codes: true,            // enables discount codes in checkout
+      billing_address_collection: 'auto',     // collects address for tax purposes
     });
 
     return NextResponse.json({ url: session.url });
