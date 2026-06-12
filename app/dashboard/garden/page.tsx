@@ -6257,6 +6257,27 @@ export default function TerraForgeHome(){
     }
     exportAsPDF(blueprints,calc,fv,apiBlueprint);
   };
+  // Strip all scripts, event handlers, and external references from AI-generated SVG
+  const sanitizeSvg=(svg:string):string=>{
+    return svg
+      // Remove <script> blocks entirely
+      .replace(/<script[\s\S]*?<\/script>/gi,'')
+      // Remove JS event attributes (onclick, onload, onerror etc.)
+      .replace(/\s+on\w+\s*=\s*["'][^"']*["']/gi,'')
+      .replace(/\s+on\w+\s*=\s*\{[^}]*\}/gi,'')
+      // Remove javascript: hrefs
+      .replace(/href\s*=\s*["']javascript:[^"']*["']/gi,'href="#"')
+      // Remove xlink:href with javascript
+      .replace(/xlink:href\s*=\s*["']javascript:[^"']*["']/gi,'xlink:href="#"')
+      // Remove external resource references (fetch, import etc)
+      .replace(/<use[^>]+href\s*=\s*["']https?:[^"']*["'][^>]*>/gi,'')
+      // Remove foreignObject (can embed HTML/JS)
+      .replace(/<foreignObject[\s\S]*?<\/foreignObject>/gi,'')
+      // Remove any remaining style blocks with expressions
+      .replace(/expression\s*\([^)]*\)/gi,'')
+      .trim();
+  };
+
   const generateVisualisation=async()=>{
     if(!isPro){requirePro('Garden Visualiser');return;}
     setVisualising(true);setVisualError('');setVisualSvg(null);
@@ -6276,7 +6297,7 @@ export default function TerraForgeHome(){
       });
       const d=await res.json();
       if(!res.ok){setVisualError(d.error||'Could not generate illustration.');setVisualising(false);return;}
-      setVisualSvg(d.svg);
+      setVisualSvg(sanitizeSvg(d.svg));
     }catch(e:any){
       setVisualError('Generation failed — please try again.');
     }
@@ -9216,8 +9237,11 @@ export default function TerraForgeHome(){
                       <div style={{borderRadius:14,overflow:'hidden',
                         border:'1px solid rgba(138,43,226,0.20)',
                         background:'rgba(255,255,255,0.02)'}}>
-                        <div dangerouslySetInnerHTML={{__html:visualSvg}}
-                          style={{width:'100%',display:'block',lineHeight:0}}/>
+                        <img
+                          src={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(visualSvg||'')}`}
+                          alt="Garden visualisation"
+                          style={{width:'100%',display:'block',borderRadius:0}}
+                        />
                       </div>
                     )}
                   </div>
