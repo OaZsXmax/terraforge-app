@@ -23,7 +23,6 @@ export async function POST(req: NextRequest) {
     if (!priceId)
       return NextResponse.json({ error: 'Missing priceId' }, { status: 400 });
 
-    // Get user from Bearer token
     const token = req.headers.get('authorization')?.replace('Bearer ', '').trim();
     if (!token)
       return NextResponse.json({ error: 'No auth token provided' }, { status: 401 });
@@ -35,7 +34,6 @@ export async function POST(req: NextRequest) {
     const userId = user.id;
     const userEmail = user.email ?? null;
 
-    // Look up or create Stripe customer
     let customerId: string | undefined;
     const { data: profile } = await supabase
       .from('profiles')
@@ -73,10 +71,7 @@ export async function POST(req: NextRequest) {
       subscription_data: {
         metadata: { supabase_user_id: userId },
       },
-      // ── Global billing additions ──
-      automatic_tax: { enabled: true },       // calculates VAT/GST per country automatically
-      allow_promotion_codes: true,            // enables discount codes in checkout
-      billing_address_collection: 'auto',     // collects address for tax purposes
+      allow_promotion_codes: true,
     });
 
     return NextResponse.json({ url: session.url });
