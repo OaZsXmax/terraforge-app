@@ -5690,6 +5690,7 @@ export default function TerraForgeHome(){
   const isPro = (isLoggedIn && planLoading) || plan === 'pro' || (!!supaUser?.email && ADMIN_EMAILS.includes(supaUser.email.toLowerCase()));
   const [paywallFeature, setPaywallFeature] = useState<string|null>(null);
   const [pdfExportCount, setPdfExportCount] = useState(0);
+  const [showShoppingList, setShowShoppingList] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [showDemo, setShowDemo] = useState(false);
   const [isSharedView, setIsSharedView] = useState(false);
@@ -6522,6 +6523,13 @@ export default function TerraForgeHome(){
       return;
     }
     const count=blueprints.filter((b:Blueprint)=>b.type===type).length+1;
+    // Multi-property is a Pro feature — free users get 1 property map
+    const existingProps=blueprints.filter((b:Blueprint)=>b.type==='property').length;
+    if(existingProps>=1 && !isPro){
+      trackEvent('paywall_view',{ feature:'Multiple Properties' });
+      setPaywallFeature('Multiple Properties');
+      return;
+    }
     const bp=newBP(type,`Property Map ${count}`);
     setBlueprints((prev:Blueprint[])=>[...prev,bp]);
     const newIdx=blueprints.filter((b:Blueprint)=>b.type===type).length;
@@ -6531,7 +6539,15 @@ export default function TerraForgeHome(){
   function duplicateBp(id:string){
     const orig=blueprints.find((b:Blueprint)=>b.id===id);if(!orig)return;
     if(orig.type==='raised-bed')return; // raised beds are managed automatically
-
+    // Duplicating a property creates a second property — Pro only
+    if(orig.type==='property'){
+      const existingProps=blueprints.filter((b:Blueprint)=>b.type==='property').length;
+      if(existingProps>=1 && !isPro){
+        trackEvent('paywall_view',{ feature:'Multiple Properties' });
+        setPaywallFeature('Multiple Properties');
+        return;
+      }
+    }
     const copy:Blueprint={...orig,id:`${orig.type}-${Date.now()}-${Math.random().toString(36).slice(2,7)}`,name:orig.name+' (copy)'};
     setBlueprints((prev:Blueprint[])=>[...prev,copy]);
     const newIdx=blueprints.filter((b:Blueprint)=>b.type===orig.type).length;
@@ -6544,6 +6560,81 @@ export default function TerraForgeHome(){
     setBlueprints((prev:Blueprint[])=>prev.filter((b:Blueprint)=>b.id!==id));
     if(deleting.type==='property')setPropIdx(0);
   }
+  // Build an aggregated, categorised shopping list from all placed features
+  const shoppingListData = useMemo(()=>{
+    const counts=new Map<string,number>();
+    allTiles.forEach((t:{id:number;icon:string})=>{
+      counts.set(t.icon,(counts.get(t.icon)??0)+1);
+    });
+    const catLabels:Record<string,string>={food:'🌾 Food Production',water:'💧 Water Systems',energy:'⚡ Energy',soil:'♻️ Soil & Compost',biodiversity:'🌼 Biodiversity',animals:'🐔 Animals',flowers:'🌷 Flowers'};
+    const groups:Record<string,{name:string;emoji:string;qty:number;costMin:number;costMax:number}[]>={};
+    let totalMin=0,totalMax=0;
+    counts.forEach((qty,emoji)=>{
+      const info:any=ICON_LOOKUP.get(emoji);
+      if(!info)return;
+      const cat=info.category||'food';
+      if(!groups[cat])groups[cat]=[];
+      const cMin=(info.costMin||0)*qty;
+      const cMax=(info.costMax||0)*qty;
+      groups[cat].push({name:info.name,emoji,qty,costMin:cMin,costMax:cMax});
+      totalMin+=cMin;totalMax+=cMax;
+    });
+    const ordered=Object.keys(groups).map(cat=>({
+      category:cat,
+      label:catLabels[cat]||cat,
+      items:groups[cat].sort((a,b)=>b.costMax-a.costMax),
+    })).filter(g=>g.items.length>0);
+    return {groups:ordered,totalMin,totalMax,itemCount:allTiles.length};
+  },[allTiles]);
+
+  const printShoppingList=()=>{
+    const w=window.open('','_blank','width=800,height=900');
+    if(!w)return;
+    const rows=shoppingListData.groups.map(g=>`
+      <h2>${g.label}</h2>
+      <table>
+        <thead><tr><th>Item</th><th>Qty</th><th>Est. Cost</th></tr></thead>
+        <tbody>
+        ${g.items.map(it=>`<tr><td>${it.emoji} ${it.name}</td><td>${it.qty}</td><td>$${it.costMin.toLocaleString()}–$${it.costMax.toLocaleString()}</td></tr>`).join('')}
+        </tbody>
+      </table>`).join('');
+    w.document.write(`<!DOCTYPE html><html><head><title>TerraForge Shopping List</title>
+    <style>
+      body{font-family:'Inter',Arial,sans-serif;background:#fff;color:#1a2e1a;margin:0;padding:32px;max-width:700px;}
+      h1{font-size:24px;color:#1a5c2a;margin:0 0 4px;}
+      .sub{font-size:13px;color:#666;margin:0 0 24px;}
+      h2{font-size:14px;color:#2e7d32;margin:24px 0 8px;border-bottom:2px solid #e0ede0;padding-bottom:4px;}
+      table{width:100%;border-collapse:collapse;margin-bottom:8px;}
+      th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:#888;padding:6px 8px;border-bottom:1px solid #eee;}
+      td{font-size:13px;padding:7px 8px;border-bottom:1px solid #f5f5f5;}
+      td:nth-child(2){text-align:center;width:60px;color:#666;}
+      td:nth-child(3){text-align:right;width:140px;font-weight:600;}
+      .total{margin-top:24px;padding:16px;background:#f0f9f1;border-radius:10px;display:flex;justify-content:space-between;align-items:center;}
+      .total-label{font-size:14px;font-weight:700;color:#1a5c2a;}
+      .total-val{font-size:20px;font-weight:800;color:#1a5c2a;}
+      .footer{margin-top:24px;font-size:11px;color:#aaa;text-align:center;}
+      @media print{body{padding:12px;}}
+    </style></head><body>
+    <h1>🌱 TerraForge Shopping List</h1>
+    <p class="sub">${shoppingListData.itemCount} features · ${fv.climateZone} climate · Generated ${new Date().toLocaleDateString()}</p>
+    ${rows}
+    <div class="total">
+      <span class="total-label">Estimated Total</span>
+      <span class="total-val">$${shoppingListData.totalMin.toLocaleString()} – $${shoppingListData.totalMax.toLocaleString()}</span>
+    </div>
+    <p class="footer">Costs are estimates for materials and starting stock. Prices vary by region and supplier. · terraforgehome.com</p>
+    <script>window.onload=()=>window.print();</script>
+    </body></html>`);
+    w.document.close();
+  };
+
+  const openShoppingList=()=>{
+    if(!hasData)return;
+    if(!requirePro('Shopping List'))return;
+    trackEvent('shopping_list_open');
+    setShowShoppingList(true);
+  };
+
   const exportPDF=()=>{
     if(!hasData) return;
     trackEvent('pdf_export', { is_pro: isPro });
@@ -6972,6 +7063,17 @@ export default function TerraForgeHome(){
               }}>
                 <Share2 style={{width:13,height:13}}/> SHARE
               </button>
+              <button onClick={openShoppingList} disabled={!hasData} style={{
+                display:'flex',alignItems:'center',gap:6,padding:'6px 14px',borderRadius:10,
+                fontFamily:"'JetBrains Mono',monospace",fontSize:10,fontWeight:700,
+                letterSpacing:'.09em',cursor:hasData?'pointer':'default',
+                color:hasData?'#a78bfa':'var(--ts)',
+                background:hasData?'rgba(167,139,250,0.10)':'rgba(255,255,255,0.03)',
+                border:`1px solid ${hasData?'rgba(167,139,250,0.28)':'rgba(255,255,255,0.06)'}`,
+                opacity:hasData?1:0.4,
+              }}>
+                🛒 LIST
+              </button>
               <button onClick={()=>setShowLogin(true)} style={{
                 width:38,height:38,borderRadius:10,cursor:'pointer',
                 display:'flex',alignItems:'center',justifyContent:'center',
@@ -7053,6 +7155,16 @@ export default function TerraForgeHome(){
                 opacity:hasData?1:0.35,
               }}>
               <Share2 style={{width:14,height:14}}/>
+            </button>
+            <button onClick={openShoppingList} disabled={!hasData}
+              style={{width:34,height:34,borderRadius:9,cursor:hasData?'pointer':'default',flexShrink:0,
+                display:'flex',alignItems:'center',justifyContent:'center',fontSize:15,
+                color:hasData?'#a78bfa':'var(--ts)',
+                background:hasData?'rgba(167,139,250,0.10)':'rgba(255,255,255,0.03)',
+                border:'1px solid rgba(167,139,250,0.24)',
+                opacity:hasData?1:0.35,
+              }}>
+              🛒
             </button>
             <button onClick={()=>setShowLogin(true)}
               style={{width:34,height:34,borderRadius:9,cursor:'pointer',flexShrink:0,
@@ -9922,6 +10034,77 @@ export default function TerraForgeHome(){
               fontFamily:"'Inter',sans-serif",whiteSpace:'nowrap',overflow:'hidden',
               textOverflow:'ellipsis',maxWidth:320}}>{shareToast}</span>
           </div>,document.body
+        )}
+
+        {/* ==== SHOPPING LIST MODAL ==== */}
+        {showShoppingList&&mounted&&createPortal(
+          <div style={{position:'fixed',inset:0,zIndex:99900,
+            background:'rgba(2,8,4,0.92)',backdropFilter:'blur(16px)',
+            display:'flex',alignItems:'center',justifyContent:'center',padding:16,overflowY:'auto'}}
+            onClick={e=>{if(e.target===e.currentTarget)setShowShoppingList(false);}}>
+            <div className="a-scaleIn" style={{maxWidth:560,width:'100%',maxHeight:'90vh',overflowY:'auto',
+              background:'linear-gradient(160deg,rgba(18,12,30,0.99),rgba(8,14,22,0.99))',
+              border:'1.5px solid rgba(167,139,250,0.25)',borderRadius:22,padding:'32px 28px',
+              boxShadow:'0 40px 100px rgba(0,0,0,0.70)',position:'relative'}}>
+              <button onClick={()=>setShowShoppingList(false)}
+                style={{position:'absolute',top:16,right:16,width:32,height:32,borderRadius:8,
+                  border:'1px solid rgba(167,139,250,0.25)',background:'rgba(167,139,250,0.08)',
+                  color:'#a78bfa',cursor:'pointer',fontSize:16,display:'flex',alignItems:'center',justifyContent:'center'}}>×</button>
+
+              <div style={{marginBottom:24}}>
+                <div style={{fontSize:11,letterSpacing:'.14em',color:'#a78bfa',
+                  fontFamily:"'JetBrains Mono',monospace",textTransform:'uppercase',marginBottom:8}}>🛒 Shopping List</div>
+                <h2 style={{fontSize:22,fontWeight:800,color:'var(--tp)',margin:'0 0 4px',
+                  fontFamily:"'Space Grotesk',sans-serif"}}>Everything You Need</h2>
+                <p style={{fontSize:13,color:'var(--ts)',fontFamily:"'Inter',sans-serif",margin:0}}>
+                  {shoppingListData.itemCount} features across {shoppingListData.groups.length} categories.
+                </p>
+              </div>
+
+              {shoppingListData.groups.map(g=>(
+                <div key={g.category} style={{marginBottom:20}}>
+                  <div style={{fontSize:12,fontWeight:700,color:'#c4b5fd',marginBottom:8,
+                    fontFamily:"'Space Grotesk',sans-serif",borderBottom:'1px solid rgba(167,139,250,0.15)',paddingBottom:6}}>
+                    {g.label}
+                  </div>
+                  {g.items.map(it=>(
+                    <div key={it.emoji} style={{display:'flex',alignItems:'center',justifyContent:'space-between',
+                      padding:'7px 0',fontFamily:"'Inter',sans-serif"}}>
+                      <span style={{fontSize:13,color:'var(--td)'}}>
+                        <span style={{marginRight:8}}>{it.emoji}</span>{it.name}
+                        {it.qty>1&&<span style={{marginLeft:6,fontSize:11,color:'#a78bfa',fontWeight:700}}>×{it.qty}</span>}
+                      </span>
+                      <span style={{fontSize:12,fontWeight:700,color:'var(--tp)',whiteSpace:'nowrap'}}>
+                        ${it.costMin.toLocaleString()}–${it.costMax.toLocaleString()}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ))}
+
+              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',
+                padding:'16px 18px',borderRadius:14,marginTop:8,marginBottom:20,
+                background:'rgba(167,139,250,0.08)',border:'1px solid rgba(167,139,250,0.20)'}}>
+                <span style={{fontSize:13,fontWeight:700,color:'#c4b5fd',fontFamily:"'Space Grotesk',sans-serif"}}>Estimated Total</span>
+                <span style={{fontSize:18,fontWeight:800,color:'#a78bfa',fontFamily:"'Space Grotesk',sans-serif"}}>
+                  ${shoppingListData.totalMin.toLocaleString()} – ${shoppingListData.totalMax.toLocaleString()}
+                </span>
+              </div>
+
+              <button onClick={printShoppingList}
+                style={{width:'100%',padding:'13px',borderRadius:12,cursor:'pointer',
+                  background:'linear-gradient(135deg,#a78bfa,#7c3aed)',border:'none',color:'#fff',
+                  fontSize:13,fontWeight:800,fontFamily:"'Space Grotesk',sans-serif",
+                  boxShadow:'0 4px 20px rgba(167,139,250,0.25)'}}>
+                Print / Save as PDF →
+              </button>
+              <p style={{textAlign:'center',fontSize:11,color:'var(--ts)',marginTop:12,
+                fontFamily:"'Inter',sans-serif",lineHeight:1.5}}>
+                Estimates for materials and starting stock. Prices vary by region and supplier.
+              </p>
+            </div>
+          </div>,
+          document.body
         )}
 
         {/* ==== HOW TO MODAL ==== */}

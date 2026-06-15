@@ -25,9 +25,13 @@ const FEATURES = [
   { label: 'Sync across devices', pro: true },
 ];
 
+const PRICE_MONTHLY = 'price_1TYXogBsMVXXOrRdRwPuUx7K';
+const PRICE_ANNUAL  = 'price_1ThhtXBsMVXXOrRddpHo3AHs';
+
 export default function Paywall({ feature, onClose, isLoggedIn, onLogin, accessToken }: PaywallProps) {
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState('');
+  const [billing, setBilling] = useState<'monthly' | 'annual'>('annual');
 
   const handleUpgrade = async () => {
     // Must be logged in so webhook can identify the user
@@ -39,7 +43,8 @@ export default function Paywall({ feature, onClose, isLoggedIn, onLogin, accessT
     setLoading(true);
     setErr('');
     try {
-      const { url } = await createCheckoutSession('price_1TYXogBsMVXXOrRdRwPuUx7K', accessToken);
+      const priceId = billing === 'annual' ? PRICE_ANNUAL : PRICE_MONTHLY;
+      const { url } = await createCheckoutSession(priceId, accessToken);
       if (url) window.location.href = url;
     } catch (e: any) {
       setErr(e?.message ?? 'Something went wrong. Please try again.');
@@ -118,12 +123,55 @@ export default function Paywall({ feature, onClose, isLoggedIn, onLogin, accessT
             </p>
           )}
 
+          {/* Billing toggle */}
+          <div style={{
+            display: 'inline-flex', padding: 3, marginBottom: 14,
+            background: 'rgba(0,0,0,0.25)', borderRadius: 99,
+            border: '1px solid rgba(0,255,130,0.12)',
+          }}>
+            {(['monthly', 'annual'] as const).map(period => (
+              <button
+                key={period}
+                onClick={() => setBilling(period)}
+                style={{
+                  position: 'relative',
+                  padding: '6px 16px', borderRadius: 99, border: 'none', cursor: 'pointer',
+                  fontSize: 11, fontWeight: 700, letterSpacing: '.04em',
+                  fontFamily: "'Courier New', monospace", textTransform: 'capitalize',
+                  background: billing === period ? 'linear-gradient(135deg,#00e87a,#00c45a)' : 'transparent',
+                  color: billing === period ? '#051a0e' : 'rgba(200,230,212,0.55)',
+                  transition: 'all 0.2s',
+                }}
+              >
+                {period}
+                {period === 'annual' && (
+                  <span style={{
+                    position: 'absolute', top: -8, right: -10,
+                    background: '#ffb020', color: '#1a0a00',
+                    fontSize: 7, fontWeight: 800, padding: '2px 5px', borderRadius: 99,
+                    letterSpacing: '.05em', textTransform: 'uppercase',
+                  }}>Save 27%</span>
+                )}
+              </button>
+            ))}
+          </div>
+
           <div style={{
             display: 'flex', alignItems: 'baseline',
-            justifyContent: 'center', gap: 3, margin: '10px 0 16px',
+            justifyContent: 'center', gap: 3, margin: '0 0 16px',
           }}>
-            <span style={{ fontSize: 34, fontWeight: 800, color: '#00ff82', letterSpacing: '-.03em' }}>$9</span>
-            <span style={{ fontSize: 13, color: 'rgba(200,230,212,0.45)' }}>/month</span>
+            {billing === 'annual' ? (
+              <>
+                <span style={{ fontSize: 34, fontWeight: 800, color: '#00ff82', letterSpacing: '-.03em' }}>$79</span>
+                <span style={{ fontSize: 13, color: 'rgba(200,230,212,0.45)' }}>/year</span>
+                <span style={{ fontSize: 11, color: 'rgba(200,230,212,0.35)', marginLeft: 6, textDecoration: 'line-through' }}>$108</span>
+              </>
+            ) : (
+              <>
+                <span style={{ fontSize: 34, fontWeight: 800, color: '#00ff82', letterSpacing: '-.03em' }}>$9</span>
+                <span style={{ fontSize: 13, color: 'rgba(200,230,212,0.45)' }}>/month</span>
+              </>
+            )}
           </div>
         </div>
 
@@ -198,8 +246,8 @@ export default function Paywall({ feature, onClose, isLoggedIn, onLogin, accessT
             {loading
               ? 'Redirecting to Stripe…'
               : needsLogin
-              ? 'Sign In to Upgrade — $9/mo'
-              : 'Upgrade to Pro — $9/mo'}
+              ? (billing === 'annual' ? 'Sign In to Upgrade — $79/yr' : 'Sign In to Upgrade — $9/mo')
+              : (billing === 'annual' ? 'Upgrade to Pro — $79/yr' : 'Upgrade to Pro — $9/mo')}
           </button>
           <p style={{
             textAlign: 'center', fontSize: 9,
