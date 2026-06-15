@@ -9864,6 +9864,17 @@ export default function TerraForgeHome(){
                     </div>
                   )}
                 </div>
+                {hasData&&(
+                  <button onClick={openShoppingList}
+                    style={{display:'flex',alignItems:'center',justifyContent:'center',gap:10,
+                      width:'100%',marginTop:16,padding:'14px 24px',borderRadius:14,cursor:'pointer',
+                      background:'linear-gradient(135deg,rgba(167,139,250,0.18),rgba(167,139,250,0.08))',
+                      border:'1px solid rgba(167,139,250,0.35)',color:'#c4b5fd',
+                      fontSize:14,fontWeight:800,fontFamily:"'Space Grotesk',sans-serif",
+                      boxShadow:'0 4px 20px rgba(167,139,250,0.12)'}}>
+                    🛒 Generate Shopping List — Everything You Need to Buy
+                  </button>
+                )}
               </div>
 
               {!hasData&&(
