@@ -705,7 +705,7 @@ const formSchema = z.object({
   prompt:      z.string().optional(),
   yardSqFt:   z.coerce.number().min(500,'Min 500 sq ft').max(200000,'Too large'),
   familySize: z.coerce.number().min(1,'Min 1').max(20,'Max 20'),
-  climateZone: z.enum(['Temperate','Arid','Subtropical','Cold']),
+  climateZone: z.enum(['Temperate','Arid','Subtropical','Cold','Tropical']),
   budget:     z.coerce.number().min(500,'Min $500').max(100000,'Max $100k'),
 }).superRefine((d:any,ctx:any)=>{
   if(d.yardSqFt>30000&&d.budget<8000) ctx.addIssue({code:z.ZodIssueCode.custom,message:'Large property needs higher budget',path:['budget']});
@@ -1061,7 +1061,7 @@ interface CalcResult {
 
 function calculateFromTiles(tiles:{id:number;icon:string}[], familySize:number, climateZone?:string): CalcResult {
   familySize=Math.max(1,familySize||1);
-  const climateMult=climateZone==='Subtropical'?1.3:climateZone==='Arid'?0.7:climateZone==='Cold'?0.8:1.0;
+  const climateMult=climateZone==='Tropical'?1.45:climateZone==='Subtropical'?1.3:climateZone==='Arid'?0.7:climateZone==='Cold'?0.8:1.0;
   const emojis = tiles.map(t=>t.icon);
   let totalYield=0,totalWater=0,totalCo2=0,costMin=0,costMax=0;
   const breakdown:any[]=[];
@@ -1500,6 +1500,12 @@ const SEASONAL:Record<string,{label:string;hex:string;activities:string[];plantN
     {label:'Autumn',hex:'#fb923c',activities:['Stock root cellar: potatoes, carrots, beets, squash','Plant garlic for spring — best done before hard frost','Canning, dehydrating, and fermentation in full swing','Winterize water systems: drain tanks and pipes'],plantNow:['🥬','🥕','🍀']},
     {label:'Winter',hex:'#93c5fd',activities:['Animal care focus — increased feed and bedding needs','Seed catalog planning and next-year layout design','Fermentation projects: sourdough, sauerkraut, kombucha','Tool sharpening, repair, and maintenance'],plantNow:[]},
   ],
+  Tropical:[
+    {label:'Wet Season',hex:'#4ade80',activities:['Plant fast-growing leafy greens between heavy rains','Ensure drainage channels are clear — waterlogging kills roots','Harvest bananas, papaya, and passionfruit as they ripen','Mulch heavily to prevent soil nutrient leaching from rain'],plantNow:['🥬','🍃','🫘','🍌']},
+    {label:'Dry Season',hex:'#facc15',activities:['Irrigate consistently — this is the main growing window','Plant tomatoes, peppers, and eggplant in the cooler dry months','Establish new fruit trees while you can control watering','Harvest and cure root crops like sweet potato and cassava'],plantNow:['🍅','🌶️','🍠','🥑']},
+    {label:'Build-Up',hex:'#fb923c',activities:['Prepare beds and drainage before the rains return','Plant cover crops to protect soil from heavy downpours','Prune fruit trees after harvest, before new growth flush','Stock up on mulch material for the wet season ahead'],plantNow:['🌾','🍂','🌱','🥭']},
+    {label:'Cool Dry',hex:'#22d3ee',activities:['Best window for most vegetables in tropical highlands','Plant brassicas and salad crops in the cooler temperatures','Harvest citrus and establish pineapple crowns','Year-round herbs thrive — harvest and propagate continuously'],plantNow:['🥦','🥗','🍊','🍍']},
+  ],
 };
 
 /* ==== PERSISTENCE ==== */
@@ -1607,6 +1613,16 @@ const EMPTY_PROP_BP:Blueprint={id:'tf-prop-1',name:'Property Map 1',type:'proper
 // Default state: property map with 1 raised bed pre-placed.
 // syncRaisedBedsToPropertyTiles will create the corresponding 'raised-bed' blueprint on mount.
 const DEFAULT_BLUEPRINTS:Blueprint[]=[DEFAULT_PROP_BP];
+const DEMO_BLUEPRINTS:Blueprint[]=[
+  {id:'tf-prop-1',name:'Sample Homestead',type:'property',
+   tiles:[
+     {id:0,icon:'🏡'},{id:1,icon:'🍅'},{id:2,icon:'🥬'},{id:3,icon:'🥕'},
+     {id:6,icon:'🌱'},{id:7,icon:'🍎'},{id:8,icon:'🍐'},{id:9,icon:'☀️'},
+     {id:12,icon:'💧'},{id:13,icon:'🐔'},{id:14,icon:'♻️'},{id:15,icon:'🌼'},
+     {id:18,icon:'🫐'},{id:19,icon:'🍓'},{id:20,icon:'🌿'},{id:21,icon:'🐝'},
+   ],
+   gridCols:6,gridCount:36,rotation:{x:-22,y:28},notes:''},
+];
 // Reset state: fully empty — score 0, no tiles, no raised beds until user adds them
 const RESET_BLUEPRINTS:Blueprint[]=[EMPTY_PROP_BP];
 
@@ -3670,7 +3686,7 @@ function StepInput({value,onChange,min=0,max=Infinity,step=500}:{value:number;on
 function LoginModal({onClose,onLoad,currentData,isPro}:{onClose:()=>void;onLoad:(d:any)=>void;currentData:any;isPro:boolean}){
   const[tab,setTab]=useState<'login'|'register'|'saves'>('login');
   const[name,setName]=useState('');
-  const[email,setEmail]=useState(()=>{try{return localStorage.getItem('tf-last-email')??'';}catch{return '';}}); 
+  const[email,setEmail]=useState(''); 
   const[password,setPassword]=useState('');
   const[confirmPassword,setConfirmPassword]=useState('');
   const[showPw,setShowPw]=useState(false);
@@ -3686,6 +3702,11 @@ function LoginModal({onClose,onLoad,currentData,isPro}:{onClose:()=>void;onLoad:
   const[cancelLoading,setCancelLoading]=useState(false);
 
   // Load current Supabase session on mount
+  // Load remembered email after mount (avoids SSR hydration mismatch)
+  useEffect(()=>{
+    try{const saved=localStorage.getItem('tf-last-email');if(saved)setEmail(saved);}catch{}
+  },[]);
+
   useEffect(()=>{
     supabase.auth.getSession().then(({data:{session}})=>{
       if(session?.user){setUser(session.user);setTab('saves');loadSaves(session.user.id);}
@@ -5670,6 +5691,8 @@ export default function TerraForgeHome(){
   const [paywallFeature, setPaywallFeature] = useState<string|null>(null);
   const [pdfExportCount, setPdfExportCount] = useState(0);
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const [showDemo, setShowDemo] = useState(false);
+  const [isSharedView, setIsSharedView] = useState(false);
   const [shareToast, setShareToast] = useState<string|null>(null);
   const [budgetWarned, setBudgetWarned] = useState(false);
   const [showHowTo, setShowHowTo] = useState(false);
@@ -5682,16 +5705,22 @@ export default function TerraForgeHome(){
   const [propertyError, setPropertyError] = useState('');
   const [pendingBudgetAdd, setPendingBudgetAdd] = useState<string|null>(null);
 
+  // Analytics event helper — fires to GA4 (gtag loaded in layout.tsx)
+  const trackEvent = (name: string, params?: Record<string, any>) => {
+    try { if (typeof window !== 'undefined' && (window as any).gtag) (window as any).gtag('event', name, params || {}); } catch {}
+  };
+
   // Direct upgrade - goes straight to checkout or login
   const handleDirectUpgrade = () => {
+    trackEvent('upgrade_click', { source: 'direct_button', logged_in: isLoggedIn });
     if (!isLoggedIn) { setShowLogin(true); return; }
     setPaywallFeature('TerraForge Pro');
   };
 
   // Single gate function: shows login if not logged in, paywall if not Pro
   const requirePro = (feature: string): boolean => {
-    if (!isLoggedIn) { setShowLogin(true); return false; }
-    if (!isPro) { setPaywallFeature(feature); return false; }
+    if (!isLoggedIn) { trackEvent('paywall_login_required', { feature }); setShowLogin(true); return false; }
+    if (!isPro) { trackEvent('paywall_view', { feature }); setPaywallFeature(feature); return false; }
     return true;
   };
   const[iconFilter, setIconFilter] = useState('all');
@@ -5783,17 +5812,36 @@ export default function TerraForgeHome(){
           if(decoded.sqft)setValue('yardSqFt',decoded.sqft);
           if(decoded.family)setValue('familySize',decoded.family);
           if(decoded.budget)setValue('budget',decoded.budget);
+          if(decoded.bps&&Array.isArray(decoded.bps)&&decoded.bps.length>0){
+            const sharedBps:Blueprint[]=decoded.bps.map((b:any)=>({
+              id:b.id??'tf-prop-1',name:b.name??'Shared Property',type:b.type??'property',
+              tiles:b.tiles??[],gridCols:b.gridCols??6,gridCount:b.gridCount??36,
+              rotation:b.rotation??{x:-22,y:28},notes:'',
+            }));
+            setBlueprints(sharedBps);
+            setIsSharedView(true);
+            trackEvent('shared_blueprint_view',{ score:decoded.score });
+          }
           window.history.replaceState({},'',window.location.pathname);
           // Show shared blueprint toast
           const t=document.createElement('div');
           t.style.cssText='position:fixed;top:20px;left:50%;transform:translateX(-50%);background:#0d2418;color:#00ffaa;border:1px solid rgba(0,255,170,0.35);border-radius:12px;padding:12px 24px;font-size:13px;font-weight:600;z-index:99999;pointer-events:none;';
-          t.textContent='Shared blueprint loaded — configure and generate to see the full plan.';
+          t.textContent='Viewing a shared homestead — tap "Make Your Own" to start designing.';
           document.body.appendChild(t);setTimeout(()=>t.remove(),5000);
+          return;
         }catch{}
       }
     }
     const saved=loadSaved();
     if(!saved){
+      // First-time visitor — show a populated demo so they see the magic immediately
+      try{
+        const demoSeen=localStorage.getItem('tf-demo-dismissed');
+        if(!demoSeen){
+          setBlueprints(JSON.parse(JSON.stringify(DEMO_BLUEPRINTS)));
+          setShowDemo(true);
+        }
+      }catch{}
       return;
     }
     if(saved.apiBlueprint){setApiBlueprint(saved.apiBlueprint);setFormOpen(true);}
@@ -5933,6 +5981,9 @@ export default function TerraForgeHome(){
 
   /* Generate */
   const onGenerate=async(data:FormData)=>{
+    trackEvent('blueprint_generate', { mode: useAI?'ai':'base', add_mode: addMode, climate: data.climateZone });
+    // Clear the demo state — user is making their own now
+    if(showDemo){setShowDemo(false);try{localStorage.setItem('tf-demo-dismissed','1');}catch{}}
     // Guard: addMode + AI requires a prompt — otherwise Claude has nothing to add
     if(addMode&&useAI&&!(data.prompt??'').trim()){
       const t=document.createElement('div');
@@ -6495,6 +6546,7 @@ export default function TerraForgeHome(){
   }
   const exportPDF=()=>{
     if(!hasData) return;
+    trackEvent('pdf_export', { is_pro: isPro });
     if(!isPro && pdfExportCount >= 1){
       requirePro('PDF Export');
       return;
@@ -6513,6 +6565,18 @@ export default function TerraForgeHome(){
     }
     exportAsPDF(blueprints,calc,fv,apiBlueprint);
   };
+  const sanitizeSvg=(svg:string):string=>{
+    return svg
+      .replace(/<script[\s\S]*?<\/script>/gi,'')
+      .replace(/\son\w+\s*=\s*["'][^"']*["']/gi,'')
+      .replace(/\son\w+\s*=\s*\{[^}]*\}/gi,'')
+      .replace(/href\s*=\s*["']javascript:[^"']*["']/gi,'href="#"')
+      .replace(/xlink:href\s*=\s*["']javascript:[^"']*["']/gi,'xlink:href="#"')
+      .replace(/<foreignObject[\s\S]*?<\/foreignObject>/gi,'')
+      .replace(/expression\s*\([^)]*\)/gi,'')
+      .trim();
+  };
+
   const generateVisualisation=async()=>{
     if(!isPro){requirePro('Garden Visualiser');return;}
     setVisualising(true);setVisualError('');setVisualSvg(null);
@@ -6532,7 +6596,7 @@ export default function TerraForgeHome(){
       });
       const d=await res.json();
       if(!res.ok){setVisualError(d.error||'Could not generate illustration.');setVisualising(false);return;}
-      setVisualSvg(d.svg);
+      setVisualSvg(sanitizeSvg(d.svg));
     }catch(e:any){
       setVisualError('Generation failed — please try again.');
     }
@@ -6628,6 +6692,7 @@ export default function TerraForgeHome(){
       zone:fv.climateZone,sqft:fv.yardSqFt,family:fv.familySize,budget:fv.budget,
       features:allTiles.reduce((acc:{[k:string]:number},t)=>{acc[t.icon]=(acc[t.icon]??0)+1;return acc;},{}),
       score:calc.resilienceScore,yield:calc.totalYieldLbs,savings:calc.year1Savings,
+      bps:blueprints.map(b=>({id:b.id,name:b.name,type:b.type,tiles:b.tiles,gridCols:b.gridCols,gridCount:b.gridCount,rotation:b.rotation})),
     };
     const encoded=btoa(encodeURIComponent(JSON.stringify(summary)));
     const url=`${window.location.origin}/dashboard/garden?share=${encoded}`;
@@ -7157,7 +7222,7 @@ export default function TerraForgeHome(){
                       background:'rgba(0,255,170,0.03)',border:'1px solid rgba(0,255,170,0.10)',
                       color:'var(--tp)',fontSize:12,fontFamily:"'Inter',sans-serif",
                     }}>
-                      {['Temperate','Arid','Subtropical','Cold'].map(z=>(
+                      {['Temperate','Arid','Subtropical','Cold','Tropical'].map(z=>(
                         <option key={z} value={z} style={{background:'#040e08'}}>{z}</option>
                       ))}
                     </select>
@@ -7781,6 +7846,58 @@ export default function TerraForgeHome(){
 
                     </div>
                   </div>
+                </div>
+              )}
+
+              {/* -- SHARED VIEW BANNER -- */}
+              {isSharedView&&hasData&&(
+                <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',
+                  flexWrap:'wrap',gap:12,marginBottom:16,padding:'14px 20px',borderRadius:14,
+                  background:'linear-gradient(135deg,rgba(0,255,170,0.10),rgba(4,14,8,0.85))',
+                  border:'1px solid rgba(0,255,170,0.25)'}}>
+                  <div style={{display:'flex',alignItems:'center',gap:10}}>
+                    <span style={{fontSize:20}}>🌱</span>
+                    <div>
+                      <div style={{fontSize:13,fontWeight:700,color:'#00ffaa',fontFamily:"'Space Grotesk',sans-serif"}}>You are viewing a shared homestead</div>
+                      <div style={{fontSize:12,color:'var(--ts)',fontFamily:"'Inter',sans-serif"}}>Like what you see? Design your own self-sufficient property for free.</div>
+                    </div>
+                  </div>
+                  <button type="button" onClick={()=>{
+                      trackEvent('shared_make_your_own_click');
+                      setIsSharedView(false);setBlueprints([{...DEFAULT_PROP_BP}]);
+                      setFormOpen(true);window.scrollTo({top:0,behavior:'smooth'});
+                    }}
+                    style={{padding:'9px 18px',borderRadius:10,cursor:'pointer',
+                      background:'linear-gradient(135deg,#00ffaa,#00c45a)',border:'none',color:'#051a0e',
+                      fontSize:12,fontWeight:800,fontFamily:"'Space Grotesk',sans-serif",whiteSpace:'nowrap'}}>
+                    Make Your Own →
+                  </button>
+                </div>
+              )}
+
+              {/* -- DEMO BANNER -- */}
+              {showDemo&&hasData&&(
+                <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',
+                  flexWrap:'wrap',gap:12,marginBottom:16,padding:'14px 20px',borderRadius:14,
+                  background:'linear-gradient(135deg,rgba(0,213,255,0.10),rgba(4,14,8,0.85))',
+                  border:'1px solid rgba(0,213,255,0.25)'}}>
+                  <div style={{display:'flex',alignItems:'center',gap:10}}>
+                    <span style={{fontSize:20}}>👋</span>
+                    <div>
+                      <div style={{fontSize:13,fontWeight:700,color:'#7dd3fc',fontFamily:"'Space Grotesk',sans-serif"}}>This is a sample homestead</div>
+                      <div style={{fontSize:12,color:'var(--ts)',fontFamily:"'Inter',sans-serif"}}>Explore the dashboard, then build your own with the Configure button.</div>
+                    </div>
+                  </div>
+                  <button type="button" onClick={()=>{
+                      setShowDemo(false);setBlueprints([{...DEFAULT_PROP_BP}]);
+                      try{localStorage.setItem('tf-demo-dismissed','1');}catch{}
+                      setFormOpen(true);
+                    }}
+                    style={{padding:'9px 18px',borderRadius:10,cursor:'pointer',
+                      background:'linear-gradient(135deg,#00d4ff,#0096c7)',border:'none',color:'#051a0e',
+                      fontSize:12,fontWeight:800,fontFamily:"'Space Grotesk',sans-serif",whiteSpace:'nowrap'}}>
+                    Start Fresh →
+                  </button>
                 </div>
               )}
 
@@ -9472,8 +9589,11 @@ export default function TerraForgeHome(){
                       <div style={{borderRadius:14,overflow:'hidden',
                         border:'1px solid rgba(138,43,226,0.20)',
                         background:'rgba(255,255,255,0.02)'}}>
-                        <div dangerouslySetInnerHTML={{__html:visualSvg}}
-                          style={{width:'100%',display:'block',lineHeight:0}}/>
+                        <img
+                          src={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(visualSvg||'')}`}
+                          alt="Garden visualisation"
+                          style={{width:'100%',display:'block'}}
+                        />
                       </div>
                     )}
                   </div>
