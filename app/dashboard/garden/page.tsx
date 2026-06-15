@@ -5712,8 +5712,10 @@ export default function TerraForgeHome(){
   };
 
   // Direct upgrade - goes straight to checkout or login
-  const handleDirectUpgrade = () => {
-    trackEvent('upgrade_click', { source: 'direct_button', logged_in: isLoggedIn });
+  const [upgradePlan, setUpgradePlan] = useState<'monthly'|'annual'>('annual');
+  const handleDirectUpgrade = (plan:'monthly'|'annual'='annual') => {
+    trackEvent('upgrade_click', { source: 'direct_button', plan, logged_in: isLoggedIn });
+    setUpgradePlan(plan);
     if (!isLoggedIn) { setShowLogin(true); return; }
     setPaywallFeature('TerraForge Pro');
   };
@@ -9208,11 +9210,25 @@ export default function TerraForgeHome(){
                   <p style={{fontSize:14,color:'rgba(200,230,212,0.55)',margin:'0 0 28px',lineHeight:1.7,maxWidth:400,marginLeft:'auto',marginRight:'auto'}}>
                     Create and manage unlimited garden blueprints. Free accounts can save 1 blueprint to their profile. Upgrade to Pro for unlimited saves and sync across devices.
                   </p>
-                  <button onClick={handleDirectUpgrade} style={{
-                    background:'linear-gradient(135deg,#00e87a,#00c45a)',border:'none',borderRadius:12,
-                    color:'#051a0e',fontSize:14,fontWeight:800,padding:'13px 32px',cursor:'pointer',
-                    letterSpacing:'.06em',fontFamily:"'Courier New',monospace",
-                  }}>Upgrade to Pro — $9/mo</button>
+                  <div style={{display:'flex',gap:10,justifyContent:'center',flexWrap:'wrap'}}>
+                    <button onClick={()=>handleDirectUpgrade('annual')} style={{
+                      position:'relative',
+                      background:'linear-gradient(135deg,#00e87a,#00c45a)',border:'none',borderRadius:12,
+                      color:'#051a0e',fontSize:14,fontWeight:800,padding:'13px 26px',cursor:'pointer',
+                      letterSpacing:'.04em',fontFamily:"'Courier New',monospace",
+                      boxShadow:'0 4px 20px rgba(0,232,122,0.25)',
+                    }}>
+                      Annual — $79/yr
+                      <span style={{position:'absolute',top:-9,right:-8,background:'#ffb020',color:'#1a0a00',
+                        fontSize:8,fontWeight:800,padding:'2px 7px',borderRadius:99,letterSpacing:'.04em',
+                        textTransform:'uppercase'}}>Save 27%</span>
+                    </button>
+                    <button onClick={()=>handleDirectUpgrade('monthly')} style={{
+                      background:'rgba(0,255,130,0.08)',border:'1px solid rgba(0,255,130,0.25)',borderRadius:12,
+                      color:'#00ff82',fontSize:14,fontWeight:800,padding:'13px 26px',cursor:'pointer',
+                      letterSpacing:'.04em',fontFamily:"'Courier New',monospace",
+                    }}>Monthly — $9/mo</button>
+                  </div>
                 </div>
               )}
               {isPro&&(<>
@@ -9350,11 +9366,24 @@ export default function TerraForgeHome(){
                   <p style={{fontSize:14,color:'rgba(200,230,212,0.55)',margin:'0 0 28px',lineHeight:1.7,maxWidth:400,marginLeft:'auto',marginRight:'auto'}}>
                     See your full financial return over 20 years — including payback period, cumulative savings, and investment timeline. Upgrade to Pro to unlock.
                   </p>
-                  <button onClick={handleDirectUpgrade} style={{
+                  <div style={{display:'flex',gap:10,justifyContent:'center',flexWrap:'wrap'}}>
+                  <button onClick={()=>handleDirectUpgrade('annual')} style={{
+                    position:'relative',
                     background:'linear-gradient(135deg,#ffb020,#f97316)',border:'none',borderRadius:12,
-                    color:'#1a0a00',fontSize:14,fontWeight:800,padding:'13px 32px',cursor:'pointer',
-                    letterSpacing:'.06em',fontFamily:"'Courier New',monospace",
-                  }}>Upgrade to Pro — $9/mo</button>
+                    color:'#1a0a00',fontSize:14,fontWeight:800,padding:'13px 26px',cursor:'pointer',
+                    letterSpacing:'.04em',fontFamily:"'Courier New',monospace",
+                  }}>
+                    Annual — $79/yr
+                    <span style={{position:'absolute',top:-9,right:-8,background:'#ffb020',color:'#1a0a00',
+                      fontSize:8,fontWeight:800,padding:'2px 7px',borderRadius:99,letterSpacing:'.04em',
+                      textTransform:'uppercase'}}>Save 27%</span>
+                  </button>
+                  <button onClick={()=>handleDirectUpgrade('monthly')} style={{
+                    background:'rgba(255,255,255,0.06)',border:'1px solid rgba(255,255,255,0.18)',borderRadius:12,
+                    color:'#ffd9a0',fontSize:14,fontWeight:800,padding:'13px 26px',cursor:'pointer',
+                    letterSpacing:'.04em',fontFamily:"'Courier New',monospace",
+                  }}>Monthly — $9/mo</button>
+                  </div>
                 </div>
               )}
               {isPro&&(<>
@@ -9429,11 +9458,24 @@ export default function TerraForgeHome(){
                     fontFamily:"'Inter',sans-serif"}}>
                     Enter your address and get a satellite view of your property with AI-powered analysis — lot size, orientation, existing trees, and more. Upgrade to Pro to unlock.
                   </p>
-                  <button onClick={handleDirectUpgrade} style={{
+                  <div style={{display:'flex',gap:10,justifyContent:'center',flexWrap:'wrap'}}>
+                  <button onClick={()=>handleDirectUpgrade('annual')} style={{
+                    position:'relative',
                     background:'linear-gradient(135deg,#ffb020,#f97316)',border:'none',borderRadius:12,
-                    color:'#1a0a00',fontSize:14,fontWeight:800,padding:'13px 32px',cursor:'pointer',
-                    letterSpacing:'.06em',fontFamily:"'Courier New',monospace",
-                  }}>Upgrade to Pro — $9/mo</button>
+                    color:'#1a0a00',fontSize:14,fontWeight:800,padding:'13px 26px',cursor:'pointer',
+                    letterSpacing:'.04em',fontFamily:"'Courier New',monospace",
+                  }}>
+                    Annual — $79/yr
+                    <span style={{position:'absolute',top:-9,right:-8,background:'#ffb020',color:'#1a0a00',
+                      fontSize:8,fontWeight:800,padding:'2px 7px',borderRadius:99,letterSpacing:'.04em',
+                      textTransform:'uppercase'}}>Save 27%</span>
+                  </button>
+                  <button onClick={()=>handleDirectUpgrade('monthly')} style={{
+                    background:'rgba(255,255,255,0.06)',border:'1px solid rgba(255,255,255,0.18)',borderRadius:12,
+                    color:'#ffd9a0',fontSize:14,fontWeight:800,padding:'13px 26px',cursor:'pointer',
+                    letterSpacing:'.04em',fontFamily:"'Courier New',monospace",
+                  }}>Monthly — $9/mo</button>
+                  </div>
                 </div>
               )}
 
@@ -9747,11 +9789,24 @@ export default function TerraForgeHome(){
                   <p style={{fontSize:14,color:'rgba(200,230,212,0.55)',margin:'0 0 28px',lineHeight:1.7,maxWidth:400,marginLeft:'auto',marginRight:'auto'}}>
                     Get a personalised phase-by-phase implementation guide — what to build, when to build it, and estimated costs for each stage. Upgrade to Pro to unlock.
                   </p>
-                  <button onClick={handleDirectUpgrade} style={{
+                  <div style={{display:'flex',gap:10,justifyContent:'center',flexWrap:'wrap'}}>
+                  <button onClick={()=>handleDirectUpgrade('annual')} style={{
+                    position:'relative',
                     background:'linear-gradient(135deg,#a78bfa,#7c3aed)',border:'none',borderRadius:12,
-                    color:'#fff',fontSize:14,fontWeight:800,padding:'13px 32px',cursor:'pointer',
-                    letterSpacing:'.06em',fontFamily:"'Courier New',monospace",
-                  }}>Upgrade to Pro — $9/mo</button>
+                    color:'#fff',fontSize:14,fontWeight:800,padding:'13px 26px',cursor:'pointer',
+                    letterSpacing:'.04em',fontFamily:"'Courier New',monospace",
+                  }}>
+                    Annual — $79/yr
+                    <span style={{position:'absolute',top:-9,right:-8,background:'#ffb020',color:'#1a0a00',
+                      fontSize:8,fontWeight:800,padding:'2px 7px',borderRadius:99,letterSpacing:'.04em',
+                      textTransform:'uppercase'}}>Save 27%</span>
+                  </button>
+                  <button onClick={()=>handleDirectUpgrade('monthly')} style={{
+                    background:'rgba(255,255,255,0.06)',border:'1px solid rgba(255,255,255,0.18)',borderRadius:12,
+                    color:'#d8c9ff',fontSize:14,fontWeight:800,padding:'13px 26px',cursor:'pointer',
+                    letterSpacing:'.04em',fontFamily:"'Courier New',monospace",
+                  }}>Monthly — $9/mo</button>
+                  </div>
                 </div>
               )}
               {isPro&&(<>
@@ -9841,11 +9896,24 @@ export default function TerraForgeHome(){
                   <p style={{fontSize:14,color:'rgba(200,230,212,0.55)',margin:'0 0 28px',lineHeight:1.7,maxWidth:400,marginLeft:'auto',marginRight:'auto'}}>
                     Access your personalised seasonal planting and maintenance calendar. Upgrade to Pro to unlock.
                   </p>
-                  <button onClick={handleDirectUpgrade} style={{
+                  <div style={{display:'flex',gap:10,justifyContent:'center',flexWrap:'wrap'}}>
+                  <button onClick={()=>handleDirectUpgrade('annual')} style={{
+                    position:'relative',
                     background:'linear-gradient(135deg,#00eeff,#0099bb)',border:'none',borderRadius:12,
-                    color:'#001a1f',fontSize:14,fontWeight:800,padding:'13px 32px',cursor:'pointer',
-                    letterSpacing:'.06em',fontFamily:"'Courier New',monospace",
-                  }}>Upgrade to Pro — $9/mo</button>
+                    color:'#001a1f',fontSize:14,fontWeight:800,padding:'13px 26px',cursor:'pointer',
+                    letterSpacing:'.04em',fontFamily:"'Courier New',monospace",
+                  }}>
+                    Annual — $79/yr
+                    <span style={{position:'absolute',top:-9,right:-8,background:'#ffb020',color:'#1a0a00',
+                      fontSize:8,fontWeight:800,padding:'2px 7px',borderRadius:99,letterSpacing:'.04em',
+                      textTransform:'uppercase'}}>Save 27%</span>
+                  </button>
+                  <button onClick={()=>handleDirectUpgrade('monthly')} style={{
+                    background:'rgba(255,255,255,0.06)',border:'1px solid rgba(255,255,255,0.18)',borderRadius:12,
+                    color:'#a0f0ff',fontSize:14,fontWeight:800,padding:'13px 26px',cursor:'pointer',
+                    letterSpacing:'.04em',fontFamily:"'Courier New',monospace",
+                  }}>Monthly — $9/mo</button>
+                  </div>
                 </div>
               )}
               {isPro&&(<>
@@ -10377,6 +10445,7 @@ export default function TerraForgeHome(){
         {paywallFeature&&(
           <Paywall
             feature={paywallFeature}
+            initialPlan={upgradePlan}
             onClose={()=>setPaywallFeature(null)}
             isLoggedIn={isLoggedIn}
             accessToken={supaSession?.access_token}

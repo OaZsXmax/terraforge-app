@@ -8,6 +8,7 @@ interface PaywallProps {
   isLoggedIn?: boolean;
   onLogin?: () => void;
   accessToken?: string;
+  initialPlan?: 'monthly' | 'annual';
 }
 
 const FEATURES = [
@@ -28,10 +29,10 @@ const FEATURES = [
 const PRICE_MONTHLY = 'price_1TYXogBsMVXXOrRdRwPuUx7K';
 const PRICE_ANNUAL  = 'price_1ThhtXBsMVXXOrRddpHo3AHs';
 
-export default function Paywall({ feature, onClose, isLoggedIn, onLogin, accessToken }: PaywallProps) {
+export default function Paywall({ feature, onClose, isLoggedIn, onLogin, accessToken, initialPlan }: PaywallProps) {
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState('');
-  const [billing, setBilling] = useState<'monthly' | 'annual'>('annual');
+  const [billing, setBilling] = useState<'monthly' | 'annual'>(initialPlan ?? 'annual');
 
   const handleUpgrade = async () => {
     // Must be logged in so webhook can identify the user
