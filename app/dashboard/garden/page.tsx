@@ -6916,7 +6916,8 @@ export default function TerraForgeHome(){
           <nav style={{
             position:'sticky',top:0,zIndex:200,
             display:'flex',alignItems:'center',
-            height:68,padding:'0 8px',gap:0,
+            height:64,padding:'0 10px',gap:0,
+            overflow:'hidden',maxWidth:'100vw',boxSizing:'border-box',
             background:'linear-gradient(160deg,rgba(10,46,28,0.99) 0%,rgba(12,28,48,0.99) 60%,rgba(18,8,50,0.98) 100%)',
             backdropFilter:'blur(20px)',
             WebkitBackdropFilter:'blur(48px) saturate(2)',
@@ -6940,7 +6941,7 @@ export default function TerraForgeHome(){
                 textShadow:'0 0 16px rgba(0,255,170,0.60)'}}>TERRAFORGE</div>
             </div>
             {/* Tabs */}
-            <div style={{display:'flex',alignItems:'center',gap:2,flex:1,padding:'0 4px',overflowX:'auto'}}>
+            <div style={{display:'flex',alignItems:'center',gap:1,flexShrink:1,padding:'0 2px',minWidth:0}}>
               {TABS.map(({id,label,Icon})=>{
                 const on=activeTab===id;
                 const proOnly=!isPro&&(id==='roi'||id==='deploy'||id==='blueprints'||id==='calendar'||id==='property');
@@ -6948,8 +6949,8 @@ export default function TerraForgeHome(){
                   <button key={id} onClick={()=>{setActiveTab(id);window.scrollTo({top:0,behavior:'smooth'});}}
                     style={{
                       display:'flex',alignItems:'center',gap:4,
-                      padding:'6px 10px',borderRadius:10,flexShrink:0,
-                      fontSize:12,fontWeight:600,cursor:'pointer',
+                      padding:'6px 8px',borderRadius:9,flexShrink:0,
+                      fontSize:11.5,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap',
                       color:on?'#00ffaa':proOnly?'rgba(175,225,195,0.45)':'rgba(175,225,195,0.55)',
                       background:on?'rgba(0,255,170,0.12)':'transparent',
                       border:on?'1px solid rgba(0,255,170,0.28)':'1px solid transparent',
@@ -6961,28 +6962,25 @@ export default function TerraForgeHome(){
               })}
             </div>
             {/* How To button */}
-            <button onClick={()=>setShowHowTo(true)}
+            <button title="How to use TerraForge" onClick={()=>setShowHowTo(true)}
               style={{
-                display:'flex',alignItems:'center',gap:7,
-                padding:'8px 14px',borderRadius:11,
+                display:'flex',alignItems:'center',justifyContent:'center',
+                width:34,height:34,borderRadius:9,
                 marginLeft:4,flexShrink:0,cursor:'pointer',
-                fontFamily:"'Space Grotesk',sans-serif",fontSize:12,fontWeight:700,
-                letterSpacing:'.08em',textTransform:'uppercase',
                 color:'rgba(0,213,255,0.80)',
                 background:'rgba(0,213,255,0.07)',
                 border:'1px solid rgba(0,213,255,0.22)',
               }}>
-              <BookOpen style={{width:13,height:13,flexShrink:0}}/>
-              <span>How To</span>
+              <BookOpen style={{width:15,height:15,flexShrink:0}}/>
             </button>
             {/* Configure button */}
             <button onClick={()=>setFormOpen((v:boolean)=>!v)}
               style={{
-                display:'flex',alignItems:'center',gap:7,
-                padding:'8px 18px',borderRadius:11,
-                marginLeft:8,marginRight:6,flexShrink:0,cursor:'pointer',
-                fontFamily:"'Space Grotesk',sans-serif",fontSize:12,fontWeight:800,
-                letterSpacing:'.10em',textTransform:'uppercase',
+                display:'flex',alignItems:'center',gap:6,
+                padding:'8px 14px',borderRadius:10,
+                marginLeft:6,marginRight:4,flexShrink:0,cursor:'pointer',
+                fontFamily:"'Space Grotesk',sans-serif",fontSize:11.5,fontWeight:800,
+                letterSpacing:'.06em',textTransform:'uppercase',whiteSpace:'nowrap',
                 color:formOpen?'var(--void)':'#00ffaa',
                 background:formOpen?'linear-gradient(135deg,#00ffaa 0%,#00d4c8 100%)':'rgba(0,255,170,0.09)',
                 border:`1px solid ${formOpen?'transparent':'rgba(0,255,170,0.30)'}`,
@@ -6993,41 +6991,39 @@ export default function TerraForgeHome(){
             </button>
             {/* Live stats */}
             {hasData&&mounted&&(
-              <div style={{display:'flex',alignItems:'center',gap:6}}>
+              <div style={{display:'flex',alignItems:'center',gap:5}}>
                 {[
                   {v:`${displayCalc.resilienceScore}`,u:'/98',l:'Score',c:'#00ffaa'},
-                  {v:`${displayCalc.totalYieldLbs.toLocaleString()}`,u:' lbs',l:'Yield',c:'#00d4ff'},
-                  {v:`$${displayCalc.year1Savings.toLocaleString()}`,u:'/yr',l:'Savings',c:'#ffb830'},
+                  {v:`${displayCalc.totalYieldLbs.toLocaleString()}`,u:'lb',l:'Yield',c:'#00d4ff'},
+                  {v:`$${displayCalc.year1Savings.toLocaleString()}`,u:'/yr',l:'Saved',c:'#ffb830'},
                 ].map(({v,u,l,c})=>(
                   <div key={l} style={{
                     display:'flex',flexDirection:'column',alignItems:'center',
-                    padding:'6px 14px',borderRadius:10,minWidth:72,
+                    padding:'5px 10px',borderRadius:9,
                     background:'rgba(0,255,170,0.06)',border:'1px solid rgba(0,255,170,0.12)',
                   }}>
-                    <span style={{fontSize:16,fontWeight:800,color:c,lineHeight:1.15,
+                    <span style={{fontSize:14,fontWeight:800,color:c,lineHeight:1.1,
                       fontFamily:"'JetBrains Mono',monospace",whiteSpace:'nowrap'}}>
-                      {v}<span style={{fontSize:9,opacity:0.50,marginLeft:2}}>{u}</span>
+                      {v}<span style={{fontSize:8,opacity:0.50,marginLeft:1}}>{u}</span>
                     </span>
-                    <span style={{fontSize:10,color:'var(--ts)',letterSpacing:'.06em',marginTop:2,
+                    <span style={{fontSize:9,color:'var(--ts)',letterSpacing:'.04em',marginTop:1,
                       fontFamily:"'Inter',sans-serif",fontWeight:600}}>{l}</span>
                   </div>
                 ))}
               </div>
             )}
-            {/* Action cluster */}
-            <div style={{display:'flex',alignItems:'center',gap:7,paddingLeft:6,
+            {/* Action cluster — compact icon buttons */}
+            <div style={{display:'flex',alignItems:'center',gap:5,paddingLeft:6,marginLeft:'auto',
               borderLeft:'1px solid rgba(0,255,170,0.07)'}}>
               {hasData&&(
-                <div style={{display:'flex',alignItems:'center',gap:5,padding:'5px 9px',borderRadius:8,
+                <div title="Live" style={{display:'flex',alignItems:'center',gap:5,padding:'7px 9px',borderRadius:8,
                   background:'rgba(0,255,170,0.055)',border:'1px solid rgba(0,255,170,0.24)'}}>
                   <div className="a-pulse" style={{width:6,height:6,borderRadius:'50%',
                     background:'#00ffaa',boxShadow:'0 0 6px #00ffaa'}}/>
-                  <span style={{fontSize:9.5,color:'var(--jade2)',letterSpacing:'.10em',
-                    fontFamily:"'JetBrains Mono',monospace",fontWeight:700}}>LIVE</span>
                 </div>
               )}
               {hasData&&(
-                <button onClick={()=>{
+                <button title="Reset everything" onClick={()=>{
                   if(!confirm('Reset everything? This will clear all blueprints, maps, and settings.'))return;
                   localStorage.removeItem(STORAGE_KEY);
                   reset({yardSqFt:10000,familySize:4,climateZone:'Temperate',budget:2800,prompt:''});
@@ -7035,53 +7031,49 @@ export default function TerraForgeHome(){
                   setPropIdx(0);setGardIdx(0);setRbIdx(0);
                   setMapSubTab('property');setFormOpen(false);setActiveTab('dashboard');
                 }} style={{
-                  display:'flex',alignItems:'center',gap:5,padding:'6px 12px',borderRadius:10,
-                  fontFamily:"'JetBrains Mono',monospace",fontSize:10,fontWeight:700,
-                  letterSpacing:'.09em',cursor:'pointer',
+                  width:34,height:34,borderRadius:9,cursor:'pointer',
+                  display:'flex',alignItems:'center',justifyContent:'center',
                   color:'var(--red)',background:'rgba(239,68,68,0.07)',
                   border:'1px solid rgba(239,68,68,0.18)',
                 }}>
-                  <RotateCcw style={{width:11,height:11}}/> RESET
+                  <RotateCcw style={{width:14,height:14}}/>
                 </button>
               )}
-              <button onClick={exportPDF} disabled={!hasData} style={{
-                display:'flex',alignItems:'center',gap:6,padding:'6px 14px',borderRadius:10,
-                fontFamily:"'JetBrains Mono',monospace",fontSize:10,fontWeight:700,
-                letterSpacing:'.09em',cursor:hasData?'pointer':'default',
+              <button title="Export PDF" onClick={exportPDF} disabled={!hasData} style={{
+                width:34,height:34,borderRadius:9,cursor:hasData?'pointer':'default',
+                display:'flex',alignItems:'center',justifyContent:'center',
                 color:hasData?'var(--amber)':'var(--ts)',
                 background:hasData?'rgba(245,158,11,0.09)':'rgba(255,255,255,0.03)',
                 border:`1px solid ${hasData?'rgba(245,158,11,0.25)':'rgba(255,255,255,0.06)'}`,
                 opacity:hasData?1:0.4,
               }}>
-                <Download style={{width:13,height:13}}/> EXPORT
+                <Download style={{width:14,height:14}}/>
               </button>
-              <button onClick={shareBlueprint} disabled={!hasData} style={{
-                display:'flex',alignItems:'center',gap:6,padding:'6px 14px',borderRadius:10,
-                fontFamily:"'JetBrains Mono',monospace",fontSize:10,fontWeight:700,
-                letterSpacing:'.09em',cursor:hasData?'pointer':'default',
+              <button title="Share blueprint" onClick={shareBlueprint} disabled={!hasData} style={{
+                width:34,height:34,borderRadius:9,cursor:hasData?'pointer':'default',
+                display:'flex',alignItems:'center',justifyContent:'center',
                 color:hasData?'var(--cyan)':'var(--ts)',
                 background:hasData?'rgba(0,238,255,0.08)':'rgba(255,255,255,0.03)',
                 border:`1px solid ${hasData?'rgba(0,238,255,0.22)':'rgba(255,255,255,0.06)'}`,
                 opacity:hasData?1:0.4,
               }}>
-                <Share2 style={{width:13,height:13}}/> SHARE
+                <Share2 style={{width:14,height:14}}/>
               </button>
-              <button onClick={openShoppingList} disabled={!hasData} style={{
-                display:'flex',alignItems:'center',gap:6,padding:'6px 14px',borderRadius:10,
-                fontFamily:"'JetBrains Mono',monospace",fontSize:10,fontWeight:700,
-                letterSpacing:'.09em',cursor:hasData?'pointer':'default',
+              <button title="Shopping list" onClick={openShoppingList} disabled={!hasData} style={{
+                width:34,height:34,borderRadius:9,cursor:hasData?'pointer':'default',
+                display:'flex',alignItems:'center',justifyContent:'center',fontSize:15,
                 color:hasData?'#a78bfa':'var(--ts)',
                 background:hasData?'rgba(167,139,250,0.10)':'rgba(255,255,255,0.03)',
                 border:`1px solid ${hasData?'rgba(167,139,250,0.28)':'rgba(255,255,255,0.06)'}`,
                 opacity:hasData?1:0.4,
               }}>
-                🛒 LIST
+                🛒
               </button>
-              <button onClick={()=>setShowLogin(true)} style={{
-                width:38,height:38,borderRadius:10,cursor:'pointer',
+              <button title="Account" onClick={()=>setShowLogin(true)} style={{
+                width:34,height:34,borderRadius:9,cursor:'pointer',
                 display:'flex',alignItems:'center',justifyContent:'center',
                 background:'rgba(0,255,170,0.14)',border:'1px solid rgba(0,255,170,0.38)',
-                boxShadow:'0 0 14px rgba(0,255,170,0.15)',fontSize:16,
+                boxShadow:'0 0 14px rgba(0,255,170,0.15)',fontSize:15,
               }}>👤</button>
               {isPro&&(
                 <span style={{
