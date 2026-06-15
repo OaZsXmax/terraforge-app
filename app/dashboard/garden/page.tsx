@@ -6192,6 +6192,7 @@ export default function TerraForgeHome(){
     }
     const result = useAI ? await generateBlueprint({
       ...data,
+      climateZone: (data.climateZone==='Tropical'?'Subtropical':data.climateZone) as 'Temperate'|'Arid'|'Subtropical'|'Cold',
       prompt: addMode
         ? `ADDITIVE REQUEST — do NOT replace or remove existing features. Only add what is specifically requested: ${(data.prompt??'').trim()}`
         : (data.prompt ?? '').trim(),
