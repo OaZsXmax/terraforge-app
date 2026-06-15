@@ -3700,6 +3700,7 @@ function LoginModal({onClose,onLoad,currentData,isPro}:{onClose:()=>void;onLoad:
   const[cancelReason,setCancelReason]=useState('');
   const[cancelOther,setCancelOther]=useState('');
   const[cancelLoading,setCancelLoading]=useState(false);
+  const[annualLoading,setAnnualLoading]=useState(false);
 
   // Load current Supabase session on mount
   // Load remembered email after mount (avoids SSR hydration mismatch)
@@ -3804,6 +3805,27 @@ function LoginModal({onClose,onLoad,currentData,isPro}:{onClose:()=>void;onLoad:
       setError('Could not cancel. Please contact support.');
     }
     setCancelLoading(false);
+  }
+
+  async function upgradeToAnnual(){
+    setAnnualLoading(true);setError('');
+    try{
+      const{data:{session}}=await supabase.auth.getSession();
+      const token=session?.access_token;
+      if(!token){setError('Session expired — please log in again.');setAnnualLoading(false);return;}
+      const res=await fetch('/api/checkout',{
+        method:'POST',
+        headers:{'Content-Type':'application/json','Authorization':`Bearer ${token}`},
+        body:JSON.stringify({priceId:'price_1ThhtXBsMVXXOrRddpHo3AHs'}),
+      });
+      const d=await res.json().catch(()=>({}));
+      if(!res.ok){setError(d.error||'Could not start upgrade. Please try again.');setAnnualLoading(false);return;}
+      if(d.url){window.location.href=d.url;return;}
+      setError('Could not start upgrade. Please try again.');
+    }catch(e){
+      setError('Could not start upgrade. Please try again.');
+    }
+    setAnnualLoading(false);
   }
 
   async function logout(){
@@ -4100,6 +4122,24 @@ function LoginModal({onClose,onLoad,currentData,isPro}:{onClose:()=>void;onLoad:
               )}
 
               {/* Manage Subscription */}
+              {isPro&&cancelFlow==='idle'&&(
+                <button onClick={upgradeToAnnual} disabled={annualLoading} style={{
+                  width:'100%',padding:'11px',borderRadius:11,fontSize:13,marginBottom:8,
+                  fontFamily:"'Space Grotesk',sans-serif",fontWeight:800,
+                  cursor:annualLoading?'wait':'pointer',position:'relative',
+                  background:annualLoading?'rgba(0,232,122,0.15)':'linear-gradient(135deg,#00e87a,#00c45a)',
+                  border:'none',color:annualLoading?'rgba(5,26,14,0.5)':'#051a0e',
+                  letterSpacing:'.03em',
+                  boxShadow:annualLoading?'none':'0 4px 18px rgba(0,232,122,0.22)'}}>
+                  {annualLoading?'Redirecting to Stripe…':'Switch to Annual — Save 27%'}
+                  {!annualLoading&&(
+                    <span style={{position:'absolute',top:-8,right:-6,background:'#ffb020',color:'#1a0a00',
+                      fontSize:8,fontWeight:800,padding:'2px 7px',borderRadius:99,letterSpacing:'.03em',
+                      textTransform:'uppercase'}}>$79/yr</span>
+                  )}
+                </button>
+              )}
+
               {isPro&&cancelFlow==='idle'&&(
                 <button onClick={()=>setCancelFlow('confirm')} style={{
                   width:'100%',padding:'8px',borderRadius:10,fontSize:12,

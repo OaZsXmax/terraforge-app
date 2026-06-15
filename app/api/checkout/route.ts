@@ -60,6 +60,42 @@ export async function POST(req: NextRequest) {
       ? process.env.NEXT_PUBLIC_APP_URL
       : `https://${process.env.NEXT_PUBLIC_APP_URL}`;
 
+    // ── Check for an existing active subscription ──
+    // If the customer already subscribes, switch the price (with proration)
+    // instead of creating a second subscription, which would double-charge them.
+    const existingSubs = await stripe.subscriptions.list({
+      customer: customerId,
+      status: 'active',
+      limit: 1,
+    });
+
+    if (existingSubs.data.length > 0) {
+      const sub = existingSubs.data[0];
+      const currentItem = sub.items.data[0];
+
+      // Already on the requested price? Nothing to do.
+      if (currentItem.price.id === priceId) {
+        return NextResponse.json({
+          error: 'You are already subscribed to this plan.',
+        }, { status: 400 });
+      }
+
+      // Switch the existing subscription to the new price with proration.
+      await stripe.subscriptions.update(sub.id, {
+        items: [{ id: currentItem.id, price: priceId }],
+        proration_behavior: 'create_prorations',
+        metadata: { supabase_user_id: userId },
+      });
+
+      // No redirect needed — the change is applied immediately.
+      // Return a success URL so the client can show confirmation.
+      return NextResponse.json({
+        url: `${appUrl}/success?switched=1`,
+        switched: true,
+      });
+    }
+
+    // ── No existing subscription — normal new checkout ──
     const session = await stripe.checkout.sessions.create({
       mode: 'subscription',
       payment_method_types: ['card'],
