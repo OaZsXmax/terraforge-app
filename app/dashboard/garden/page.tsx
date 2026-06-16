@@ -2297,9 +2297,10 @@ type CanvasState=Record<number,CanvasCell>;
 
 declare global{interface Window{google:any;}}
 
-function PropertyCanvas({onClose,isPro,onPaywall}:{onClose:()=>void;isPro:boolean;onPaywall:()=>void}){
+function PropertyCanvas({onClose,isPro,onPaywall,initialAddress}:{onClose:()=>void;isPro:boolean;onPaywall:()=>void;initialAddress:string}){
   const mapRef=useRef<HTMLDivElement>(null);
   const mapInstance=useRef<any>(null);
+  const geocoderRef=useRef<any>(null);
   const [cells,setCells]=useState<CanvasState>(()=>{
     try{const s=localStorage.getItem('tf-canvas-v1');return s?JSON.parse(s):{};}catch{return {};}
   });
@@ -2307,53 +2308,75 @@ function PropertyCanvas({onClose,isPro,onPaywall}:{onClose:()=>void;isPro:boolea
   const [activeCat,setActiveCat]=useState<string>('food');
   const [mapLoaded,setMapLoaded]=useState(false);
   const [hoveredCell,setHoveredCell]=useState<number|null>(null);
-  const [zoom,setZoom]=useState(18);
+  const [searchAddr,setSearchAddr]=useState(initialAddress||'');
+  const [placingMode,setPlacingMode]=useState(false);
   const dragTile=useRef<{emoji:string;name:string}|null>(null);
+  const overlayRef=useRef<HTMLDivElement>(null);
 
-  // Persist to localStorage
-  useEffect(()=>{
-    try{localStorage.setItem('tf-canvas-v1',JSON.stringify(cells));}catch{}
-  },[cells]);
+  // Persist cells
+  useEffect(()=>{try{localStorage.setItem('tf-canvas-v1',JSON.stringify(cells));}catch{}},[cells]);
 
-  // Load Google Maps
+  // Load Google Maps script once
   useEffect(()=>{
     const apiKey=process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
-    if(!apiKey)return;
-    if(window.google?.maps){initMap();return;}
-    const existing=document.getElementById('tf-gmaps');
-    if(existing){if(window.google?.maps)initMap();else existing.addEventListener('load',initMap);return;}
+    if(!apiKey){console.warn('NEXT_PUBLIC_GOOGLE_MAPS_API_KEY not set');return;}
+    const tryInit=()=>{if(window.google?.maps){doInitMap();}};
+    if(window.google?.maps){doInitMap();return;}
+    const existing=document.getElementById('tf-gmaps-script');
+    if(existing){existing.addEventListener('load',tryInit);return()=>existing.removeEventListener('load',tryInit);}
     const s=document.createElement('script');
-    s.id='tf-gmaps';
-    s.src=`https://maps.googleapis.com/maps/api/js?key=${apiKey}`;
-    s.async=true;
-    s.onload=initMap;
+    s.id='tf-gmaps-script';
+    s.src=`https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places`;
+    s.async=true;s.defer=true;
+    s.onload=tryInit;
     document.head.appendChild(s);
     return()=>{};
   },[]);
 
-  function initMap(){
+  function doInitMap(){
     if(!mapRef.current||mapInstance.current)return;
-    mapInstance.current=new window.google.maps.Map(mapRef.current,{
+    const map=new window.google.maps.Map(mapRef.current,{
       center:{lat:39.8283,lng:-98.5795},
-      zoom:5,
+      zoom:4,
       mapTypeId:'satellite',
       tilt:0,
+      gestureHandling:'greedy',
       disableDefaultUI:false,
       zoomControl:true,
       streetViewControl:false,
       mapTypeControl:false,
       fullscreenControl:false,
+      scrollwheel:true,
     });
-    mapInstance.current.addListener('zoom_changed',()=>{
-      setZoom(mapInstance.current.getZoom());
-    });
+    mapInstance.current=map;
+    geocoderRef.current=new window.google.maps.Geocoder();
     setMapLoaded(true);
+    // Auto-geocode if we have an address
+    if(initialAddress.trim()){
+      geocoderRef.current.geocode({address:initialAddress},(results:any,status:any)=>{
+        if(status==='OK'&&results[0]){
+          map.setCenter(results[0].geometry.location);
+          map.setZoom(19);
+        }
+      });
+    }
+  }
+
+  function searchAddress(){
+    if(!geocoderRef.current||!searchAddr.trim())return;
+    geocoderRef.current.geocode({address:searchAddr},(results:any,status:any)=>{
+      if(status==='OK'&&results[0]&&mapInstance.current){
+        mapInstance.current.setCenter(results[0].geometry.location);
+        mapInstance.current.setZoom(19);
+      }else{alert('Address not found — try a more specific address.');}
+    });
   }
 
   function handleCellClick(idx:number){
     if(selected){
       setCells(prev=>({...prev,[idx]:{emoji:selected.emoji,name:selected.name}}));
-    } else {
+    }else{
+      // No tile selected + click = erase
       setCells(prev=>{const n={...prev};delete n[idx];return n;});
     }
   }
@@ -2365,8 +2388,7 @@ function PropertyCanvas({onClose,isPro,onPaywall}:{onClose:()=>void;isPro:boolea
     dragTile.current=null;
   }
 
-  function clearCanvas(){
-    if(confirm('Clear all tiles from canvas?')){setCells({});}}
+  function clearCanvas(){if(confirm('Clear all tiles from canvas?')){setCells({});}}
 
   const cats=Array.from(new Set(CANVAS_TILES.map(t=>t.cat)));
   const paletteItems=CANVAS_TILES.filter(t=>t.cat===activeCat);
@@ -2376,20 +2398,41 @@ function PropertyCanvas({onClose,isPro,onPaywall}:{onClose:()=>void;isPro:boolea
     <div style={{position:'fixed',inset:0,zIndex:9000,background:'rgba(4,14,8,0.97)',display:'flex',flexDirection:'column',fontFamily:"'Inter',sans-serif"}}>
 
       {/* Top bar */}
-      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'14px 20px',
-        borderBottom:'1px solid rgba(0,255,170,0.15)',background:'rgba(10,31,21,0.95)',flexShrink:0,gap:12,flexWrap:'wrap'}}>
-        <div style={{display:'flex',alignItems:'center',gap:12}}>
-          <span style={{fontFamily:"'Space Grotesk',sans-serif",fontWeight:700,fontSize:16,color:'#00ffaa'}}>🗺️ Property Canvas</span>
-          <span style={{fontSize:12,color:'rgba(0,255,170,0.5)',background:'rgba(0,255,170,0.08)',
-            border:'1px solid rgba(0,255,170,0.15)',borderRadius:99,padding:'3px 10px'}}>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 16px',
+        borderBottom:'1px solid rgba(0,255,170,0.15)',background:'rgba(10,31,21,0.98)',flexShrink:0,gap:10,flexWrap:'wrap'}}>
+        <div style={{display:'flex',alignItems:'center',gap:10}}>
+          <span style={{fontFamily:"'Space Grotesk',sans-serif",fontWeight:700,fontSize:15,color:'#00ffaa'}}>🗺️ Property Canvas</span>
+          <span style={{fontSize:11,color:'rgba(0,255,170,0.5)',background:'rgba(0,255,170,0.08)',
+            border:'1px solid rgba(0,255,170,0.15)',borderRadius:99,padding:'2px 9px'}}>
             {placedCount} tile{placedCount!==1?'s':''} placed
           </span>
         </div>
-        <div style={{display:'flex',gap:8,alignItems:'center'}}>
-          <button onClick={clearCanvas} style={{padding:'7px 14px',borderRadius:8,cursor:'pointer',
+        {/* Address search */}
+        <div style={{display:'flex',gap:6,flex:'1 1 280px',maxWidth:420}}>
+          <input value={searchAddr} onChange={e=>setSearchAddr(e.target.value)}
+            onKeyDown={e=>{if(e.key==='Enter')searchAddress();}}
+            placeholder="Search address or pan the map…"
+            style={{flex:1,padding:'7px 12px',borderRadius:8,fontSize:12,
+              background:'rgba(0,255,170,0.05)',border:'1px solid rgba(0,255,170,0.2)',
+              color:'#d2fcea',outline:'none',fontFamily:"'Inter',sans-serif"}}/>
+          <button onClick={searchAddress}
+            style={{padding:'7px 14px',borderRadius:8,cursor:'pointer',flexShrink:0,
+              background:'rgba(0,255,170,0.15)',border:'1px solid rgba(0,255,170,0.35)',
+              color:'#00ffaa',fontSize:12,fontWeight:700}}>Go</button>
+        </div>
+        <div style={{display:'flex',gap:6,alignItems:'center'}}>
+          {/* Place mode toggle */}
+          <button onClick={()=>setPlacingMode(p=>!p)}
+            style={{padding:'7px 14px',borderRadius:8,cursor:'pointer',
+              background:placingMode?'rgba(0,255,170,0.2)':'rgba(255,255,255,0.06)',
+              border:`1px solid ${placingMode?'rgba(0,255,170,0.5)':'rgba(255,255,255,0.15)'}`,
+              color:placingMode?'#00ffaa':'rgba(200,230,212,0.6)',fontSize:12,fontWeight:700}}>
+            {placingMode?'✏️ Placing':'🖐 Navigate'}
+          </button>
+          <button onClick={clearCanvas} style={{padding:'7px 12px',borderRadius:8,cursor:'pointer',
             background:'rgba(255,80,80,0.1)',border:'1px solid rgba(255,80,80,0.25)',
             color:'#ff8080',fontSize:12,fontWeight:600}}>Clear</button>
-          <button onClick={onClose} style={{padding:'7px 14px',borderRadius:8,cursor:'pointer',
+          <button onClick={onClose} style={{padding:'7px 12px',borderRadius:8,cursor:'pointer',
             background:'rgba(0,255,170,0.1)',border:'1px solid rgba(0,255,170,0.25)',
             color:'#00ffaa',fontSize:12,fontWeight:600}}>✕ Close</button>
         </div>
@@ -2398,73 +2441,76 @@ function PropertyCanvas({onClose,isPro,onPaywall}:{onClose:()=>void;isPro:boolea
       {/* Main body */}
       <div style={{display:'flex',flex:1,overflow:'hidden',minHeight:0}}>
 
-        {/* Left sidebar — tile palette */}
-        <div style={{width:220,flexShrink:0,display:'flex',flexDirection:'column',
-          borderRight:'1px solid rgba(0,255,170,0.12)',background:'rgba(8,22,14,0.95)',overflow:'hidden'}}>
+        {/* Left sidebar */}
+        <div style={{width:200,flexShrink:0,display:'flex',flexDirection:'column',
+          borderRight:'1px solid rgba(0,255,170,0.12)',background:'rgba(8,22,14,0.98)',overflow:'hidden'}}>
 
-          {/* Selected tile indicator */}
-          <div style={{padding:'12px 14px',borderBottom:'1px solid rgba(0,255,170,0.1)',flexShrink:0}}>
+          {/* Selected tile */}
+          <div style={{padding:'10px 12px',borderBottom:'1px solid rgba(0,255,170,0.1)',flexShrink:0,minHeight:56}}>
             {selected?(
-              <div style={{display:'flex',alignItems:'center',gap:8,padding:'8px 12px',
-                background:'rgba(0,255,170,0.1)',border:'1px solid rgba(0,255,170,0.3)',borderRadius:10}}>
+              <div style={{display:'flex',alignItems:'center',gap:8,padding:'7px 10px',
+                background:'rgba(0,255,170,0.1)',border:'1px solid rgba(0,255,170,0.3)',borderRadius:9}}>
                 <span style={{fontSize:20}}>{selected.emoji}</span>
                 <div>
-                  <div style={{fontSize:12,fontWeight:700,color:'#00ffaa'}}>{selected.name}</div>
-                  <div style={{fontSize:10,color:'rgba(0,255,170,0.5)'}}>Click grid to place · Click again to deselect</div>
+                  <div style={{fontSize:11,fontWeight:700,color:'#00ffaa'}}>{selected.name}</div>
+                  <div style={{fontSize:9,color:'rgba(0,255,170,0.45)'}}>Click grid to place</div>
                 </div>
+                <button onClick={()=>setSelected(null)}
+                  style={{marginLeft:'auto',background:'none',border:'none',color:'rgba(0,255,170,0.5)',cursor:'pointer',fontSize:14,lineHeight:1}}>✕</button>
               </div>
             ):(
-              <div style={{fontSize:11,color:'rgba(170,240,210,0.4)',textAlign:'center',padding:'6px 0'}}>
-                Select a tile below, then click the grid — or drag tiles directly
+              <div style={{fontSize:10,color:'rgba(170,240,210,0.35)',textAlign:'center',padding:'8px 0',lineHeight:1.5}}>
+                Select a tile below<br/>then click the grid
               </div>
             )}
           </div>
 
           {/* Category tabs */}
-          <div style={{display:'flex',flexWrap:'wrap',gap:4,padding:'10px 10px 6px',flexShrink:0}}>
+          <div style={{display:'flex',flexWrap:'wrap',gap:3,padding:'8px 8px 4px',flexShrink:0}}>
             {cats.map(cat=>(
               <button key={cat} onClick={()=>setActiveCat(cat)}
-                style={{padding:'4px 9px',borderRadius:99,fontSize:10,fontWeight:700,cursor:'pointer',
+                style={{padding:'3px 8px',borderRadius:99,fontSize:9,fontWeight:700,cursor:'pointer',
                   background:activeCat===cat?CAT_COLORS[cat]:'rgba(255,255,255,0.05)',
                   border:`1px solid ${activeCat===cat?CAT_COLORS[cat]:'rgba(255,255,255,0.1)'}`,
-                  color:activeCat===cat?'#0a1f15':'rgba(200,230,212,0.7)'}}>
+                  color:activeCat===cat?'#0a1f15':'rgba(200,230,212,0.6)'}}>
                 {CAT_LABELS[cat]}
               </button>
             ))}
           </div>
 
           {/* Tile list */}
-          <div style={{flex:1,overflowY:'auto',padding:'6px 10px 16px'}}>
-            {paletteItems.map(tile=>(
-              <div key={tile.emoji+tile.name}
-                draggable
-                onDragStart={()=>{dragTile.current={emoji:tile.emoji,name:tile.name};}}
-                onClick={()=>setSelected(prev=>prev?.emoji===tile.emoji&&prev?.name===tile.name?null:tile)}
-                style={{display:'flex',alignItems:'center',gap:10,padding:'8px 10px',borderRadius:9,cursor:'grab',
-                  marginBottom:3,transition:'background .15s',
-                  background:selected?.emoji===tile.emoji&&selected?.name===tile.name
-                    ?`rgba(${CAT_COLORS[tile.cat].replace('#','').match(/.{2}/g)?.map(h=>parseInt(h,16)).join(',')},0.18)`
-                    :'rgba(255,255,255,0.03)',
-                  border:selected?.emoji===tile.emoji&&selected?.name===tile.name
-                    ?`1px solid ${CAT_COLORS[tile.cat]}44`:'1px solid transparent'}}>
-                <span style={{fontSize:18,lineHeight:1}}>{tile.emoji}</span>
-                <span style={{fontSize:12,color:'rgba(200,230,212,0.8)',fontWeight:500}}>{tile.name}</span>
-              </div>
-            ))}
+          <div style={{flex:1,overflowY:'auto',padding:'4px 8px 16px'}}>
+            {paletteItems.map(tile=>{
+              const isSel=selected?.emoji===tile.emoji&&selected?.name===tile.name;
+              return(
+                <div key={tile.emoji+tile.name}
+                  draggable
+                  onDragStart={()=>{dragTile.current={emoji:tile.emoji,name:tile.name};setPlacingMode(true);}}
+                  onClick={()=>{setSelected(isSel?null:tile);if(!isSel)setPlacingMode(true);}}
+                  style={{display:'flex',alignItems:'center',gap:8,padding:'6px 8px',borderRadius:8,cursor:'grab',
+                    marginBottom:2,
+                    background:isSel?'rgba(0,255,170,0.12)':'rgba(255,255,255,0.02)',
+                    border:`1px solid ${isSel?'rgba(0,255,170,0.4)':'transparent'}`}}>
+                  <span style={{fontSize:16,lineHeight:1}}>{tile.emoji}</span>
+                  <span style={{fontSize:11,color:'rgba(200,230,212,0.75)',fontWeight:500}}>{tile.name}</span>
+                </div>
+              );
+            })}
           </div>
         </div>
 
         {/* Centre — map + grid overlay */}
-        <div style={{flex:1,display:'flex',flexDirection:'column',position:'relative',overflow:'hidden'}}>
+        <div style={{flex:1,position:'relative',overflow:'hidden'}}>
 
-          {/* Map */}
-          <div ref={mapRef} style={{position:'absolute',inset:0}}/>
+          {/* Google Map — always full size, pointer events always on */}
+          <div ref={mapRef} style={{position:'absolute',inset:0,zIndex:0}}/>
 
-          {/* Grid overlay */}
-          <div style={{position:'absolute',inset:0,display:'grid',
-            gridTemplateColumns:`repeat(${CANVAS_GRID},1fr)`,
-            gridTemplateRows:`repeat(${CANVAS_GRID},1fr)`,
-            pointerEvents:'none'}}>
+          {/* Grid overlay — pointer-events only when in placing mode */}
+          <div ref={overlayRef}
+            style={{position:'absolute',inset:0,zIndex:1,display:'grid',
+              gridTemplateColumns:`repeat(${CANVAS_GRID},1fr)`,
+              gridTemplateRows:`repeat(${CANVAS_GRID},1fr)`,
+              pointerEvents:placingMode?'all':'none'}}>
             {Array.from({length:CANVAS_GRID*CANVAS_GRID},(_,i)=>(
               <div key={i}
                 onDragOver={e=>{e.preventDefault();setHoveredCell(i);}}
@@ -2474,28 +2520,28 @@ function PropertyCanvas({onClose,isPro,onPaywall}:{onClose:()=>void;isPro:boolea
                 onMouseEnter={()=>setHoveredCell(i)}
                 onMouseLeave={()=>setHoveredCell(null)}
                 style={{
-                  border:'1px solid rgba(0,255,170,0.12)',
+                  border:`1px solid rgba(0,255,170,${placingMode?0.18:0.08})`,
                   background:hoveredCell===i
-                    ?'rgba(0,255,170,0.18)'
-                    :cells[i]?'rgba(0,0,0,0.45)':'transparent',
+                    ?'rgba(0,255,170,0.2)'
+                    :cells[i]?'rgba(0,0,0,0.5)':'transparent',
                   display:'flex',alignItems:'center',justifyContent:'center',
-                  cursor:selected?'crosshair':'default',
-                  pointerEvents:'all',
-                  fontSize:cells[i]?Math.max(10,28-Math.floor(zoom/4))+'px':'14px',
+                  cursor:selected?'crosshair':placingMode?'cell':'default',
+                  fontSize:cells[i]?'20px':'14px',
                   transition:'background .1s',
                   position:'relative',
                   userSelect:'none',
                 }}>
                 {cells[i]&&(
-                  <span title={cells[i].name} style={{lineHeight:1,filter:'drop-shadow(0 1px 3px rgba(0,0,0,0.8))'}}>
+                  <span title={cells[i].name}
+                    style={{lineHeight:1,filter:'drop-shadow(0 1px 4px rgba(0,0,0,0.9))',pointerEvents:'none'}}>
                     {cells[i].emoji}
                   </span>
                 )}
                 {hoveredCell===i&&cells[i]&&(
-                  <div style={{position:'absolute',bottom:'100%',left:'50%',transform:'translateX(-50%)',
-                    background:'rgba(10,31,21,0.95)',border:'1px solid rgba(0,255,170,0.3)',
+                  <div style={{position:'absolute',bottom:'calc(100% + 4px)',left:'50%',transform:'translateX(-50%)',
+                    background:'rgba(10,31,21,0.97)',border:'1px solid rgba(0,255,170,0.3)',
                     borderRadius:6,padding:'3px 8px',fontSize:10,color:'#00ffaa',whiteSpace:'nowrap',
-                    pointerEvents:'none',zIndex:10,marginBottom:2}}>
+                    pointerEvents:'none',zIndex:20}}>
                     {cells[i].name}
                   </div>
                 )}
@@ -2503,40 +2549,42 @@ function PropertyCanvas({onClose,isPro,onPaywall}:{onClose:()=>void;isPro:boolea
             ))}
           </div>
 
-          {/* Map hint */}
+          {/* Mode badge */}
+          {mapLoaded&&(
+            <div style={{position:'absolute',bottom:16,left:'50%',transform:'translateX(-50%)',
+              background:'rgba(10,31,21,0.92)',border:'1px solid rgba(0,255,170,0.2)',
+              borderRadius:10,padding:'7px 16px',fontSize:11,color:'rgba(0,255,170,0.7)',
+              pointerEvents:'none',zIndex:10,whiteSpace:'nowrap',textAlign:'center'}}>
+              {placingMode
+                ?`✏️ Place mode — ${selected?`click to place ${selected.emoji}`:'click grid to erase · select a tile to place'}`
+                :'🖐 Navigate mode — pan &amp; zoom freely · click "Placing" to place tiles'}
+            </div>
+          )}
+
+          {/* Loading */}
           {!mapLoaded&&(
             <div style={{position:'absolute',inset:0,display:'flex',alignItems:'center',justifyContent:'center',
-              background:'rgba(4,14,8,0.85)'}}>
+              background:'rgba(4,14,8,0.9)',zIndex:5}}>
               <div style={{textAlign:'center'}}>
                 <div style={{fontSize:32,marginBottom:12}}>🛰️</div>
                 <div style={{color:'#00ffaa',fontWeight:600,fontSize:14}}>Loading satellite map…</div>
               </div>
             </div>
           )}
-
-          {/* Instructions overlay (fade after first interaction) */}
-          {mapLoaded&&placedCount===0&&(
-            <div style={{position:'absolute',bottom:20,left:'50%',transform:'translateX(-50%)',
-              background:'rgba(10,31,21,0.92)',border:'1px solid rgba(0,255,170,0.2)',
-              borderRadius:12,padding:'10px 20px',fontSize:12,color:'rgba(0,255,170,0.7)',
-              pointerEvents:'none',whiteSpace:'nowrap',zIndex:10}}>
-              📍 Pan &amp; zoom to your property · Select a tile from the left · Click or drag onto the grid
-            </div>
-          )}
         </div>
 
-        {/* Right sidebar — legend */}
-        <div style={{width:160,flexShrink:0,borderLeft:'1px solid rgba(0,255,170,0.12)',
-          background:'rgba(8,22,14,0.95)',overflowY:'auto',padding:'14px 12px'}}>
-          <div style={{fontSize:10,fontWeight:700,color:'rgba(0,255,170,0.5)',
-            letterSpacing:'.1em',textTransform:'uppercase',marginBottom:10}}>Legend</div>
+        {/* Right legend */}
+        <div style={{width:150,flexShrink:0,borderLeft:'1px solid rgba(0,255,170,0.12)',
+          background:'rgba(8,22,14,0.98)',overflowY:'auto',padding:'12px 10px'}}>
+          <div style={{fontSize:9,fontWeight:700,color:'rgba(0,255,170,0.45)',
+            letterSpacing:'.1em',textTransform:'uppercase',marginBottom:8}}>Legend</div>
           {cats.map(cat=>(
             <div key={cat} style={{marginBottom:6}}>
-              <div style={{fontSize:10,fontWeight:700,color:CAT_COLORS[cat],marginBottom:3}}>{CAT_LABELS[cat]}</div>
+              <div style={{fontSize:9,fontWeight:700,color:CAT_COLORS[cat],marginBottom:2,textTransform:'uppercase',letterSpacing:'.05em'}}>{CAT_LABELS[cat]}</div>
               {CANVAS_TILES.filter(t=>t.cat===cat).map(t=>(
-                <div key={t.emoji+t.name} style={{display:'flex',alignItems:'center',gap:6,marginBottom:2}}>
-                  <span style={{fontSize:13}}>{t.emoji}</span>
-                  <span style={{fontSize:10,color:'rgba(170,240,210,0.6)'}}>{t.name}</span>
+                <div key={t.emoji+t.name} style={{display:'flex',alignItems:'center',gap:5,marginBottom:1}}>
+                  <span style={{fontSize:12}}>{t.emoji}</span>
+                  <span style={{fontSize:9,color:'rgba(170,240,210,0.55)'}}>{t.name}</span>
                 </div>
               ))}
             </div>
@@ -10801,6 +10849,7 @@ export default function TerraForgeHome(){
             onClose={()=>setCanvasOpen(false)}
             isPro={isPro}
             onPaywall={()=>{setCanvasOpen(false);setPaywallFeature('Property Canvas');}}
+            initialAddress={propertyAddress}
           />
         )}
 
