@@ -9637,7 +9637,8 @@ export default function TerraForgeHome(){
                   );
                 })}
               </div>
-          </>)}
+              </div>
+              )}
             </div>
           )}
 
@@ -9675,7 +9676,8 @@ export default function TerraForgeHome(){
                   </div>
                 </div>
               )}
-              {isPro&&<>
+              {isPro&&(
+              <div>
               {/* Header */}
               <div style={{position:'relative',overflow:'hidden',borderRadius:22,padding:'24px 28px',
                 background:'linear-gradient(135deg,rgba(255,176,32,0.08) 0%,rgba(20,12,0,0.90) 40%,rgba(8,6,0,0.88) 100%)',
@@ -9725,8 +9727,8 @@ export default function TerraForgeHome(){
                   </div>
                 )}
               </div>
-            </div>
-            )}
+              </div>
+              )}
             </div>
           )}
 
