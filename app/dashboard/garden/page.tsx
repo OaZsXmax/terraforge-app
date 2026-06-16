@@ -2308,10 +2308,9 @@ function PropertyCanvas({isPro,onPaywall,address}:{isPro:boolean;onPaywall:()=>v
   const [mapLoaded,setMapLoaded]=useState(false);
   const [placingMode,setPlacingMode]=useState(false);
   const [hoveredCell,setHoveredCell]=useState<number|null>(null);
-  const [searchAddr,setSearchAddr]=useState(address||'');
   const dragTile=useRef<{emoji:string;name:string}|null>(null);
 
-  // Persist cells to localStorage — canvas survives close/reopen
+  // Persist tiles — survives close, refresh, everything
   useEffect(()=>{try{localStorage.setItem('tf-canvas-v1',JSON.stringify(cells));}catch{}},[cells]);
 
   // Init map once on mount
@@ -2319,53 +2318,48 @@ function PropertyCanvas({isPro,onPaywall,address}:{isPro:boolean;onPaywall:()=>v
     if(didInit.current)return;
     const apiKey=process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
     if(!apiKey)return;
-
     function boot(){
       if(didInit.current)return;
       didInit.current=true;
       setTimeout(()=>{
         if(!mapRef.current)return;
         const map=new window.google.maps.Map(mapRef.current,{
-          center:{lat:39.8283,lng:-98.5795},
-          zoom:4,
-          mapTypeId:'satellite',
-          tilt:0,
-          gestureHandling:'greedy',
-          zoomControl:true,
-          streetViewControl:false,
-          mapTypeControl:false,
-          fullscreenControl:false,
+          center:{lat:39.8283,lng:-98.5795},zoom:4,
+          mapTypeId:'satellite',tilt:0,gestureHandling:'greedy',
+          zoomControl:true,streetViewControl:false,mapTypeControl:false,fullscreenControl:false,
         });
         mapInstance.current=map;
-        const gc=new window.google.maps.Geocoder();
-        geocoderRef.current=gc;
+        geocoderRef.current=new window.google.maps.Geocoder();
         setMapLoaded(true);
+        // Center on address if available at mount
         if(address.trim()){
-          gc.geocode({address},(r:any,s:any)=>{
+          geocoderRef.current.geocode({address},(r:any,s:any)=>{
             if(s==='OK'&&r[0]){map.setCenter(r[0].geometry.location);map.setZoom(19);}
           });
         }
       },80);
     }
-
     if(window.google?.maps){boot();return;}
     const ex=document.getElementById('tf-gmaps-script');
     if(ex){ex.addEventListener('load',boot,{once:true} as any);return;}
     const s=document.createElement('script');
     s.id='tf-gmaps-script';
     s.src=`https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places`;
-    s.async=true;
-    s.onload=boot;
+    s.async=true;s.onload=boot;
     document.head.appendChild(s);
   },[]);
 
-  function goToAddress(){
-    if(!searchAddr.trim()||!geocoderRef.current||!mapInstance.current)return;
-    geocoderRef.current.geocode({address:searchAddr},(r:any,s:any)=>{
+  // Sync map whenever the address prop changes (user types in Property tab address field)
+  const lastGeocodedAddr=useRef('');
+  useEffect(()=>{
+    if(!address.trim())return;
+    if(address===lastGeocodedAddr.current)return;
+    if(!geocoderRef.current||!mapInstance.current)return;
+    lastGeocodedAddr.current=address;
+    geocoderRef.current.geocode({address},(r:any,s:any)=>{
       if(s==='OK'&&r[0]){mapInstance.current.setCenter(r[0].geometry.location);mapInstance.current.setZoom(19);}
-      else alert('Address not found — try a more specific address.');
     });
-  }
+  },[address]);
 
   function handleCellClick(i:number){
     if(!placingMode)return;
@@ -2406,7 +2400,7 @@ function PropertyCanvas({isPro,onPaywall,address}:{isPro:boolean;onPaywall:()=>v
     <div style={{borderRadius:20,overflow:'hidden',border:'1px solid rgba(0,255,170,0.18)',
       background:'rgba(8,22,14,0.97)'}}>
 
-      {/* Canvas toolbar */}
+      {/* Toolbar */}
       <div style={{display:'flex',alignItems:'center',gap:10,padding:'12px 16px',
         borderBottom:'1px solid rgba(0,255,170,0.12)',flexWrap:'wrap',
         background:'rgba(10,31,21,0.98)'}}>
@@ -2417,19 +2411,10 @@ function PropertyCanvas({isPro,onPaywall,address}:{isPro:boolean;onPaywall:()=>v
           borderRadius:99,padding:'2px 8px',flexShrink:0}}>
           {placedCount} tile{placedCount!==1?'s':''}
         </span>
-        {/* Address search */}
-        <div style={{display:'flex',gap:6,flex:'1 1 200px',maxWidth:360}}>
-          <input value={searchAddr} onChange={e=>setSearchAddr(e.target.value)}
-            onKeyDown={e=>{if(e.key==='Enter')goToAddress();}}
-            placeholder="Jump to address…"
-            style={{flex:1,padding:'6px 10px',borderRadius:8,fontSize:12,
-              background:'rgba(0,255,170,0.04)',border:'1px solid rgba(0,255,170,0.18)',
-              color:'#d2fcea',outline:'none',fontFamily:"'Inter',sans-serif",minWidth:0}}/>
-          <button onClick={goToAddress} style={{padding:'6px 12px',borderRadius:8,
-            cursor:'pointer',flexShrink:0,background:'rgba(0,255,170,0.12)',
-            border:'1px solid rgba(0,255,170,0.3)',color:'#00ffaa',fontSize:12,fontWeight:700}}>Go</button>
-        </div>
-        {/* Mode toggle */}
+        {address.trim()&&(
+          <span style={{fontSize:11,color:'rgba(0,255,170,0.4)',flexShrink:0}}>📍 {address}</span>
+        )}
+        <div style={{flex:1}}/>
         <button onClick={()=>setPlacingMode(p=>!p)} style={{padding:'6px 12px',borderRadius:8,
           cursor:'pointer',flexShrink:0,fontSize:12,fontWeight:700,
           background:placingMode?'rgba(0,255,170,0.18)':'rgba(255,255,255,0.05)',
@@ -2443,14 +2428,12 @@ function PropertyCanvas({isPro,onPaywall,address}:{isPro:boolean;onPaywall:()=>v
           color:'#ff8080',fontSize:12,fontWeight:600}}>Clear</button>
       </div>
 
-      {/* Canvas body — map + palette side by side */}
+      {/* Body */}
       <div style={{display:'flex',height:520}}>
 
-        {/* Tile palette — left */}
+        {/* Tile palette */}
         <div style={{width:176,flexShrink:0,display:'flex',flexDirection:'column',
           borderRight:'1px solid rgba(0,255,170,0.1)',overflowY:'auto'}}>
-
-          {/* Selected tile chip */}
           <div style={{padding:'8px 10px',borderBottom:'1px solid rgba(0,255,170,0.08)',flexShrink:0,minHeight:48}}>
             {selected?(
               <div style={{display:'flex',alignItems:'center',gap:6,padding:'5px 8px',
@@ -2465,8 +2448,6 @@ function PropertyCanvas({isPro,onPaywall,address}:{isPro:boolean;onPaywall:()=>v
                 lineHeight:1.5,paddingTop:4}}>Select a tile<br/>then click grid</div>
             )}
           </div>
-
-          {/* Category tabs */}
           <div style={{display:'flex',flexWrap:'wrap',gap:2,padding:'6px 8px 4px',flexShrink:0}}>
             {cats.map(cat=>(
               <button key={cat} onClick={()=>setActiveCat(cat)}
@@ -2478,14 +2459,11 @@ function PropertyCanvas({isPro,onPaywall,address}:{isPro:boolean;onPaywall:()=>v
               </button>
             ))}
           </div>
-
-          {/* Tiles */}
           <div style={{flex:1,overflowY:'auto',padding:'2px 6px 12px'}}>
             {CANVAS_TILES.filter(t=>t.cat===activeCat).map(tile=>{
               const isSel=selected?.emoji===tile.emoji&&selected?.name===tile.name;
               return(
-                <div key={tile.name}
-                  draggable
+                <div key={tile.name} draggable
                   onDragStart={()=>{dragTile.current={emoji:tile.emoji,name:tile.name};}}
                   onClick={()=>{setSelected(isSel?null:tile);if(!isSel)setPlacingMode(true);}}
                   style={{display:'flex',alignItems:'center',gap:7,padding:'5px 7px',
@@ -2500,13 +2478,9 @@ function PropertyCanvas({isPro,onPaywall,address}:{isPro:boolean;onPaywall:()=>v
           </div>
         </div>
 
-        {/* Map + grid overlay — right */}
+        {/* Map + grid */}
         <div style={{flex:1,position:'relative'}}>
-
-          {/* Google Map */}
           <div ref={mapRef} style={{position:'absolute',inset:0,zIndex:0}}/>
-
-          {/* Grid overlay — invisible to mouse in navigate mode */}
           <div style={{position:'absolute',inset:0,zIndex:1,
             display:'grid',
             gridTemplateColumns:`repeat(${CANVAS_GRID},1fr)`,
@@ -2543,8 +2517,6 @@ function PropertyCanvas({isPro,onPaywall,address}:{isPro:boolean;onPaywall:()=>v
               </div>
             ))}
           </div>
-
-          {/* Loading overlay */}
           {!mapLoaded&&(
             <div style={{position:'absolute',inset:0,display:'flex',alignItems:'center',
               justifyContent:'center',background:'rgba(4,14,8,0.92)',zIndex:5}}>
@@ -2554,8 +2526,6 @@ function PropertyCanvas({isPro,onPaywall,address}:{isPro:boolean;onPaywall:()=>v
               </div>
             </div>
           )}
-
-          {/* Mode hint */}
           {mapLoaded&&(
             <div style={{position:'absolute',bottom:10,left:'50%',transform:'translateX(-50%)',
               background:'rgba(10,31,21,0.9)',border:'1px solid rgba(0,255,170,0.15)',
@@ -2563,7 +2533,7 @@ function PropertyCanvas({isPro,onPaywall,address}:{isPro:boolean;onPaywall:()=>v
               pointerEvents:'none',zIndex:10,whiteSpace:'nowrap'}}>
               {placingMode
                 ?`✏️ ${selected?`Click to place ${selected.emoji} ${selected.name}`:'Click cell to erase · select a tile to place'}`
-                :'🖐 Navigate — pan &amp; zoom freely · switch to Placing to add tiles'}
+                :'🖐 Navigate — pan & zoom freely · switch to Placing to add tiles'}
             </div>
           )}
         </div>
@@ -10119,7 +10089,7 @@ export default function TerraForgeHome(){
                 </div>
               )}
 
-            {/* Property Canvas — inline, always visible in Property tab */}
+            {/* Property Canvas — inline, always visible, tiles persist via localStorage */}
             <PropertyCanvas
               isPro={isPro}
               onPaywall={()=>setPaywallFeature('Property Canvas')}
