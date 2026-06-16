@@ -2316,51 +2316,57 @@ function PropertyCanvas({onClose,isPro,onPaywall,initialAddress}:{onClose:()=>vo
   // Persist cells
   useEffect(()=>{try{localStorage.setItem('tf-canvas-v1',JSON.stringify(cells));}catch{}},[cells]);
 
-  // Load Google Maps script once
+  // Load Google Maps — re-init every time canvas opens
   useEffect(()=>{
     const apiKey=process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
     if(!apiKey){console.warn('NEXT_PUBLIC_GOOGLE_MAPS_API_KEY not set');return;}
-    const tryInit=()=>{if(window.google?.maps){doInitMap();}};
+    mapInstance.current=null;
+
+    function doInitMap(){
+      // Wait for DOM node to be ready
+      setTimeout(()=>{
+        if(!mapRef.current)return;
+        const map=new window.google.maps.Map(mapRef.current,{
+          center:{lat:39.8283,lng:-98.5795},
+          zoom:4,
+          mapTypeId:'satellite',
+          tilt:0,
+          gestureHandling:'greedy',
+          disableDefaultUI:false,
+          zoomControl:true,
+          streetViewControl:false,
+          mapTypeControl:false,
+          fullscreenControl:false,
+        });
+        mapInstance.current=map;
+        const geocoder=new window.google.maps.Geocoder();
+        geocoderRef.current=geocoder;
+        setMapLoaded(true);
+        if(initialAddress.trim()){
+          geocoder.geocode({address:initialAddress},(results:any,status:any)=>{
+            if(status==='OK'&&results[0]){
+              map.setCenter(results[0].geometry.location);
+              map.setZoom(19);
+            }
+          });
+        }
+      },80);
+    }
+
     if(window.google?.maps){doInitMap();return;}
     const existing=document.getElementById('tf-gmaps-script');
-    if(existing){existing.addEventListener('load',tryInit);return()=>existing.removeEventListener('load',tryInit);}
+    if(existing){
+      if(window.google?.maps){doInitMap();}
+      else{existing.addEventListener('load',doInitMap,{once:true} as any);}
+      return;
+    }
     const s=document.createElement('script');
     s.id='tf-gmaps-script';
     s.src=`https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places`;
-    s.async=true;s.defer=true;
-    s.onload=tryInit;
+    s.async=true;
+    s.onload=doInitMap;
     document.head.appendChild(s);
-    return()=>{};
   },[]);
-
-  function doInitMap(){
-    if(!mapRef.current||mapInstance.current)return;
-    const map=new window.google.maps.Map(mapRef.current,{
-      center:{lat:39.8283,lng:-98.5795},
-      zoom:4,
-      mapTypeId:'satellite',
-      tilt:0,
-      gestureHandling:'greedy',
-      disableDefaultUI:false,
-      zoomControl:true,
-      streetViewControl:false,
-      mapTypeControl:false,
-      fullscreenControl:false,
-      scrollwheel:true,
-    });
-    mapInstance.current=map;
-    geocoderRef.current=new window.google.maps.Geocoder();
-    setMapLoaded(true);
-    // Auto-geocode if we have an address
-    if(initialAddress.trim()){
-      geocoderRef.current.geocode({address:initialAddress},(results:any,status:any)=>{
-        if(status==='OK'&&results[0]){
-          map.setCenter(results[0].geometry.location);
-          map.setZoom(19);
-        }
-      });
-    }
-  }
 
   function searchAddress(){
     if(!geocoderRef.current||!searchAddr.trim())return;
