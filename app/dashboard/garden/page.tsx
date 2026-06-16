@@ -9947,8 +9947,8 @@ export default function TerraForgeHome(){
                       </div>
                     </div>
                   </div>
-
-
+              </div>
+            )}
 
             {/* Property Canvas — shown only after property is analysed */}
             {propertyData&&(
