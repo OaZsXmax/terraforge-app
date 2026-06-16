@@ -9767,7 +9767,7 @@ export default function TerraForgeHome(){
                 </div>
               )}
 
-              {isPro&&<>
+              {isPro&&(<>
               {/* Header */}
               <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',flexWrap:'wrap',gap:12}}>
                 <div>
@@ -9988,7 +9988,7 @@ export default function TerraForgeHome(){
               </div>
             )}
 
-            </>}
+            </>)}
             </div>
           )}
 
