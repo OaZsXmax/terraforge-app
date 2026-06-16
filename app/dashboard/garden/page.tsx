@@ -6022,9 +6022,6 @@ export default function TerraForgeHome(){
   const [budgetWarned, setBudgetWarned] = useState(false);
   const [showHowTo, setShowHowTo] = useState(false);
   const [propertyAddress, setPropertyAddress] = useState('');
-  const [visualising, setVisualising] = useState(false);
-  const [visualSvg, setVisualSvg] = useState<string|null>(null);
-  const [visualError, setVisualError] = useState('');
   const [propertyAnalysing, setPropertyAnalysing] = useState(false);
   const [propertyData, setPropertyData] = useState<{address:string;lat:number;lng:number;satelliteUrl:string;analysis:any}|null>(null);
   const [propertyError, setPropertyError] = useState('');
@@ -6995,41 +6992,6 @@ export default function TerraForgeHome(){
       .trim();
   };
 
-  const generateVisualisation=async()=>{
-    if(!isPro){requirePro('Garden Visualiser');return;}
-    setVisualising(true);setVisualError('');setVisualSvg(null);
-    try{
-      const features=allTiles.map(t=>ICON_LOOKUP.get(t.icon)?.name).filter(Boolean);
-      const res=await fetch('/api/visualise-property',{
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({
-          address:propertyData?.address||propertyAddress||'My Property',
-          sqft:propertyData?.analysis?.totalSqFt||Number(fv.yardSqFt)||10000,
-          zone:fv.climateZone||'Temperate',
-          features,
-          existingFeatures:propertyData?.analysis?.existingFeatures||[],
-          blueprintSummary:apiBlueprint?.summary||'',
-        }),
-      });
-      const d=await res.json();
-      if(!res.ok){setVisualError(d.error||'Could not generate illustration.');setVisualising(false);return;}
-      setVisualSvg(sanitizeSvg(d.svg));
-    }catch(e:any){
-      setVisualError('Generation failed — please try again.');
-    }
-    setVisualising(false);
-  };
-
-  const downloadVisualisation=()=>{
-    if(!visualSvg)return;
-    const blob=new Blob([visualSvg],{type:'image/svg+xml'});
-    const url=URL.createObjectURL(blob);
-    const a=document.createElement('a');
-    a.href=url;a.download='TerraForge-Garden-Art.svg';
-    document.body.appendChild(a);a.click();a.remove();
-    URL.revokeObjectURL(url);
-  };
 
   const analyseProperty=async()=>{
     if(!propertyAddress.trim()){setPropertyError('Please enter a property address.');return;}
@@ -7393,12 +7355,21 @@ export default function TerraForgeHome(){
               }}>
                 🛒
               </button>
-              <button title="Account" onClick={()=>setShowLogin(true)} style={{
-                width:34,height:34,borderRadius:9,cursor:'pointer',
-                display:'flex',alignItems:'center',justifyContent:'center',
-                background:'rgba(0,255,170,0.14)',border:'1px solid rgba(0,255,170,0.38)',
-                boxShadow:'0 0 14px rgba(0,255,170,0.15)',fontSize:15,
-              }}>👤</button>
+              {isLoggedIn?(
+                <a href="/profile" title="My Profile" style={{
+                  width:34,height:34,borderRadius:9,cursor:'pointer',
+                  display:'flex',alignItems:'center',justifyContent:'center',
+                  background:'rgba(0,255,170,0.14)',border:'1px solid rgba(0,255,170,0.38)',
+                  boxShadow:'0 0 14px rgba(0,255,170,0.15)',fontSize:15,textDecoration:'none',
+                }}>👤</a>
+              ):(
+                <button title="Sign In" onClick={()=>setShowLogin(true)} style={{
+                  width:34,height:34,borderRadius:9,cursor:'pointer',
+                  display:'flex',alignItems:'center',justifyContent:'center',
+                  background:'rgba(0,255,170,0.14)',border:'1px solid rgba(0,255,170,0.38)',
+                  boxShadow:'0 0 14px rgba(0,255,170,0.15)',fontSize:15,
+                }}>👤</button>
+              )}
               {isPro&&(
                 <span style={{
                   fontSize:9,fontWeight:700,padding:'2px 8px',borderRadius:99,
@@ -9548,7 +9519,8 @@ export default function TerraForgeHome(){
                   </div>
                 </div>
               )}
-              {isPro&&(<>
+              {isPro&&(
+              <div>
               {/* Header */}
               <div style={{position:'relative',overflow:'hidden',borderRadius:22,padding:'24px 28px',
                 background:'linear-gradient(135deg,rgba(0,255,170,0.06) 0%,rgba(12,28,18,0.82) 40%,rgba(0,6,18,0.88) 100%)',
@@ -9703,7 +9675,7 @@ export default function TerraForgeHome(){
                   </div>
                 </div>
               )}
-              {isPro&&(<>
+              {isPro&&<>
               {/* Header */}
               <div style={{position:'relative',overflow:'hidden',borderRadius:22,padding:'24px 28px',
                 background:'linear-gradient(135deg,rgba(255,176,32,0.08) 0%,rgba(20,12,0,0.90) 40%,rgba(8,6,0,0.88) 100%)',
@@ -9753,7 +9725,8 @@ export default function TerraForgeHome(){
                   </div>
                 )}
               </div>
-            </>)}
+            </div>
+            )}
             </div>
           )}
 
@@ -9796,7 +9769,8 @@ export default function TerraForgeHome(){
                 </div>
               )}
 
-              {isPro&&<>
+              {isPro&&(
+              <div>
               {/* Header */}
               <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',flexWrap:'wrap',gap:12}}>
                 <div>
@@ -9977,128 +9951,51 @@ export default function TerraForgeHome(){
                     </div>
                   </div>
 
-                  {/* CTA to generate blueprint */}
-                  <div style={{padding:'24px 28px',borderRadius:18,
-                    background:'linear-gradient(135deg,rgba(0,255,170,0.07),rgba(4,14,8,0.90))',
-                    border:'1px solid rgba(0,255,170,0.18)',
-                    display:'flex',alignItems:'center',justifyContent:'space-between',
-                    flexWrap:'wrap',gap:16}}>
-                    <div>
-                      <div style={{fontSize:15,fontWeight:700,color:'var(--tp)',
-                        fontFamily:"'Space Grotesk',sans-serif",marginBottom:4}}>
-                        Ready to design your homestead?
-                      </div>
-                      <div style={{fontSize:12,color:'var(--ts)',fontFamily:"'Inter',sans-serif"}}>
-                        Head to the Dashboard and use your address data to generate a blueprint tailored to your actual property.
-                      </div>
-                    </div>
-                    <button type="button"
-                      onClick={()=>{
-                        // Pre-fill form with detected data
-                        if(propertyData.analysis.totalSqFt)setValue('yardSqFt',propertyData.analysis.totalSqFt,{shouldValidate:true});
-                        if(propertyData.analysis.climateHint)setValue('climateZone',propertyData.analysis.climateHint,{shouldValidate:true});
-                        setActiveTab('dashboard');
-                        setFormOpen(true);
-                      }}
-                      style={{padding:'12px 24px',borderRadius:12,cursor:'pointer',
-                        background:'linear-gradient(135deg,#00ffaa,#00c45a)',
-                        border:'none',color:'#051a0e',fontSize:13,fontWeight:800,
-                        fontFamily:"'Space Grotesk',sans-serif",
-                        boxShadow:'0 4px 20px rgba(0,255,170,0.25)',
-                        whiteSpace:'nowrap'}}>
-                      Generate Blueprint →
-                    </button>
-                  </div>
 
-                  {/* ── Garden Visualiser ── */}
-                  <div style={{padding:'24px 28px',borderRadius:18,
-                    background:'linear-gradient(135deg,rgba(138,43,226,0.07),rgba(4,14,8,0.90))',
-                    border:'1px solid rgba(138,43,226,0.20)'}}>
-                    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',
-                      flexWrap:'wrap',gap:12,marginBottom:visualSvg?20:0}}>
-                      <div>
-                        <div style={{fontSize:15,fontWeight:700,color:'var(--tp)',
-                          fontFamily:"'Space Grotesk',sans-serif",marginBottom:4}}>
-                          🎨 Garden Visualiser
-                        </div>
-                        <div style={{fontSize:12,color:'var(--ts)',fontFamily:"'Inter',sans-serif"}}>
-                          Generate a beautiful artistic illustration of your homestead layout.
-                        </div>
-                      </div>
-                      <div style={{display:'flex',gap:10,flexWrap:'wrap'}}>
-                        {visualSvg&&(
-                          <button type="button" onClick={downloadVisualisation}
-                            style={{display:'flex',alignItems:'center',gap:6,padding:'10px 18px',
-                              borderRadius:10,cursor:'pointer',
-                              background:'rgba(138,43,226,0.12)',
-                              border:'1px solid rgba(138,43,226,0.30)',
-                              color:'rgba(200,150,255,0.90)',
-                              fontSize:12,fontWeight:700,fontFamily:"'Space Grotesk',sans-serif"}}>
-                            <Download style={{width:13,height:13}}/> Save SVG
-                          </button>
-                        )}
-                        <button type="button" onClick={generateVisualisation}
-                          disabled={visualising}
-                          style={{display:'flex',alignItems:'center',gap:8,padding:'10px 22px',
-                            borderRadius:10,cursor:visualising?'wait':'pointer',
-                            background:visualising?'rgba(138,43,226,0.05)':
-                              'linear-gradient(135deg,rgba(138,43,226,0.20),rgba(138,43,226,0.08))',
-                            border:'1px solid rgba(138,43,226,0.35)',
-                            color:'rgba(200,150,255,0.95)',
-                            fontSize:12,fontWeight:700,fontFamily:"'Space Grotesk',sans-serif",
-                            boxShadow:visualising?'none':'0 4px 16px rgba(138,43,226,0.15)'}}>
-                          {visualising?(
-                            <><div className="a-pulse" style={{width:6,height:6,borderRadius:'50%',
-                              background:'rgba(200,150,255,0.90)'}}/> Creating art…</>
-                          ):<>✦ {visualSvg?'Regenerate':'Generate Illustration'}</>}
-                        </button>
-                      </div>
-                    </div>
-                    {visualError&&<p style={{fontSize:12,color:'var(--red)',marginTop:8,
-                      fontFamily:"'JetBrains Mono',monospace"}}>{visualError}</p>}
-                    {visualSvg&&(
-                      <div style={{borderRadius:14,overflow:'hidden',
-                        border:'1px solid rgba(138,43,226,0.20)',
-                        background:'rgba(255,255,255,0.02)'}}>
-                        <img
-                          src={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(visualSvg||'')}`}
-                          alt="Garden visualisation"
-                          style={{width:'100%',display:'block'}}
-                        />
-                      </div>
-                    )}
-                  </div>
 
-                </div>
-              )}
-
-              {/* Empty state */}
-              {!propertyData&&!propertyAnalysing&&(
-                <div style={{padding:'64px 32px',textAlign:'center',borderRadius:24,
-                  background:'linear-gradient(135deg,rgba(0,255,170,0.03),rgba(4,14,8,0.90))',
-                  border:'1px dashed rgba(0,255,170,0.12)'}}>
-                  <div style={{fontSize:48,marginBottom:16}}>🛰️</div>
-                  <div style={{fontSize:18,fontWeight:700,color:'var(--tp)',
-                    fontFamily:"'Space Grotesk',sans-serif",marginBottom:8}}>
-                    Enter your address above
-                  </div>
-                  <p style={{fontSize:14,color:'var(--ts)',fontFamily:"'Inter',sans-serif",
-                    maxWidth:400,margin:'0 auto',lineHeight:1.6}}>
-                    TerraForge will fetch a satellite image of your property and use AI to estimate your lot size, garden orientation, existing trees, and more.
-                  </p>
-                </div>
-              )}
+            {/* Visualiser placeholder — keeps fragment structure for tsc */}
+            <div style={{display:'none'}}/>
 
             {/* Property Canvas — shown only after property is analysed */}
             {propertyData&&(
-              <PropertyCanvas
-                isPro={isPro}
-                onPaywall={()=>setPaywallFeature('Property Canvas')}
-                address={propertyAddress}
-              />
+              <div style={{display:'flex',flexDirection:'column',gap:16}}>
+                {/* Canvas how-to strip */}
+                <div style={{borderRadius:14,padding:'16px 20px',
+                  background:'rgba(0,255,170,0.05)',border:'1px solid rgba(0,255,170,0.15)',
+                  display:'flex',flexWrap:'wrap',gap:16,alignItems:'flex-start'}}>
+                  <div style={{fontSize:22,flexShrink:0}}>🗺️</div>
+                  <div style={{flex:1,minWidth:200}}>
+                    <div style={{fontFamily:"'Space Grotesk',sans-serif",fontWeight:700,
+                      color:'#00ffaa',fontSize:13,marginBottom:8}}>How to use Property Canvas</div>
+                    <div style={{display:'flex',flexWrap:'wrap',gap:10}}>
+                      {[
+                        {icon:'🖐',text:'Default is Navigate mode — pan & zoom freely'},
+                        {icon:'✏️',text:'Click Placing to switch into tile-placing mode'},
+                        {icon:'🌱',text:'Select a tile from the left, then click a grid cell'},
+                        {icon:'🖱️',text:'Or drag a tile directly from the panel onto the map'},
+                        {icon:'✕',text:'Click an occupied cell with no tile selected to erase'},
+                        {icon:'💾',text:'Canvas auto-saves — tiles persist between sessions'},
+                      ].map(h=>(
+                        <div key={h.icon} style={{display:'flex',alignItems:'center',gap:6,
+                          padding:'5px 10px',borderRadius:8,
+                          background:'rgba(0,255,170,0.06)',border:'1px solid rgba(0,255,170,0.1)'}}>
+                          <span style={{fontSize:14}}>{h.icon}</span>
+                          <span style={{fontSize:11,color:'rgba(170,240,210,0.8)'}}>{h.text}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+                <PropertyCanvas
+                  isPro={isPro}
+                  onPaywall={()=>setPaywallFeature('Property Canvas')}
+                  address={propertyAddress}
+                />
+              </div>
             )}
 
-            </>}
+            </div>
+            )}
             </div>
           )}
 
@@ -10727,6 +10624,27 @@ export default function TerraForgeHome(){
                     }}>{body}</p>
                   </div>
                 </div>
+              ))}
+            </div>
+
+            {/* Footer links */}
+            <div style={{display:'flex',gap:20,flexWrap:'wrap',marginBottom:16,paddingBottom:16,
+              borderBottom:'1px solid rgba(0,255,170,0.08)'}}>
+              {[
+                {href:'/faq',label:'FAQ'},
+                {href:'/contact',label:'Contact & Feedback'},
+                {href:'/homestead-planner',label:'Homestead Planner'},
+                {href:'/permaculture-design',label:'Permaculture Design'},
+                {href:'/food-forest-planner',label:'Food Forest Planner'},
+                {href:'/seasonal-planting-calendar',label:'Planting Calendar'},
+              ].map(l=>(
+                <a key={l.href} href={l.href}
+                  style={{fontSize:11,color:'rgba(0,255,170,0.55)',textDecoration:'none',
+                    fontFamily:"'Inter',sans-serif",fontWeight:500,
+                    transition:'color .15s'}}
+                  onMouseEnter={e=>(e.currentTarget.style.color='rgba(0,255,170,0.9)')}
+                  onMouseLeave={e=>(e.currentTarget.style.color='rgba(0,255,170,0.55)')}
+                >{l.label}</a>
               ))}
             </div>
 
