@@ -2262,6 +2262,290 @@ const ONBOARDING_STEPS=[
   {emoji:'📊',title:'Track Your Progress',desc:'Dashboard, Overview, ROI, and Deploy tabs give you financial projections, resilience scores, and a step-by-step implementation plan.',cta:'Got it'},
   {emoji:'🚀',title:'You Are Ready',desc:'Start with an example prompt or Configure your property. Your blueprint saves automatically as you work.',cta:'Start Building'},
 ];
+
+// ─── Property Canvas ──────────────────────────────────────────────────────────
+const CANVAS_TILES=[
+  {name:'Raised Bed',emoji:'🌱',cat:'food'},{name:'Greenhouse',emoji:'🏡',cat:'food'},
+  {name:'Herb Spiral',emoji:'🌿',cat:'food'},{name:'Tomatoes',emoji:'🍅',cat:'food'},
+  {name:'Apple Tree',emoji:'🍎',cat:'food'},{name:'Lemon Tree',emoji:'🍋',cat:'food'},
+  {name:'Pear Tree',emoji:'🍐',cat:'food'},{name:'Peach Tree',emoji:'🍑',cat:'food'},
+  {name:'Mango Tree',emoji:'🥭',cat:'food'},{name:'Avocado',emoji:'🥑',cat:'food'},
+  {name:'Banana Tree',emoji:'🍌',cat:'food'},{name:'Orange Tree',emoji:'🍊',cat:'food'},
+  {name:'Cherry Tree',emoji:'🍒',cat:'food'},{name:'Blueberries',emoji:'🫐',cat:'food'},
+  {name:'Grapes',emoji:'🍇',cat:'food'},{name:'Strawberries',emoji:'🍓',cat:'food'},
+  {name:'Corn',emoji:'🌽',cat:'food'},{name:'Carrots',emoji:'🥕',cat:'food'},
+  {name:'Kale',emoji:'🥬',cat:'food'},{name:'Potatoes',emoji:'🥔',cat:'food'},
+  {name:'Beans',emoji:'🫘',cat:'food'},{name:'Pumpkin',emoji:'🎃',cat:'food'},
+  {name:'Rain Tank',emoji:'💧',cat:'water'},{name:'Swale',emoji:'🌊',cat:'water'},
+  {name:'Pond',emoji:'🐟',cat:'water'},{name:'Cistern',emoji:'🪣',cat:'water'},
+  {name:'Rain Garden',emoji:'🌧️',cat:'water'},{name:'Drip Irrigation',emoji:'🚿',cat:'water'},
+  {name:'Solar Panel',emoji:'☀️',cat:'energy'},{name:'Wind Turbine',emoji:'🌬️',cat:'energy'},
+  {name:'Solar Battery',emoji:'🔋',cat:'energy'},{name:'Solar Pump',emoji:'⚡',cat:'energy'},
+  {name:'Compost Bin',emoji:'♻️',cat:'soil'},{name:'Hugelkultur',emoji:'🌲',cat:'soil'},
+  {name:'Cover Crops',emoji:'🌾',cat:'soil'},{name:'Mulch Zone',emoji:'🍂',cat:'soil'},
+  {name:'Chicken Coop',emoji:'🐔',cat:'animals'},{name:'Beehive',emoji:'🐝',cat:'animals'},
+  {name:'Duck Pond',emoji:'🦆',cat:'animals'},{name:'Rabbit Hutch',emoji:'🐇',cat:'animals'},
+  {name:'Native Plants',emoji:'🌸',cat:'bio'},{name:'Wildflower',emoji:'🌼',cat:'bio'},
+  {name:'Food Forest',emoji:'🌳',cat:'bio'},{name:'Hedgerow',emoji:'🌿',cat:'bio'},
+];
+const CAT_COLORS:Record<string,string>={food:'#00ffaa',water:'#00d4ff',energy:'#facc15',soil:'#d97706',animals:'#f472b6',bio:'#a78bfa'};
+const CAT_LABELS:Record<string,string>={food:'Food',water:'Water',energy:'Energy',soil:'Soil',animals:'Animals',bio:'Biodiversity'};
+const CANVAS_GRID=16;
+
+type CanvasCell={emoji:string;name:string};
+type CanvasState=Record<number,CanvasCell>;
+
+declare global{interface Window{google:any;}}
+
+function PropertyCanvas({onClose,isPro,onPaywall}:{onClose:()=>void;isPro:boolean;onPaywall:()=>void}){
+  const mapRef=useRef<HTMLDivElement>(null);
+  const mapInstance=useRef<any>(null);
+  const [cells,setCells]=useState<CanvasState>(()=>{
+    try{const s=localStorage.getItem('tf-canvas-v1');return s?JSON.parse(s):{};}catch{return {};}
+  });
+  const [selected,setSelected]=useState<{emoji:string;name:string}|null>(null);
+  const [activeCat,setActiveCat]=useState<string>('food');
+  const [mapLoaded,setMapLoaded]=useState(false);
+  const [hoveredCell,setHoveredCell]=useState<number|null>(null);
+  const [zoom,setZoom]=useState(18);
+  const dragTile=useRef<{emoji:string;name:string}|null>(null);
+
+  // Persist to localStorage
+  useEffect(()=>{
+    try{localStorage.setItem('tf-canvas-v1',JSON.stringify(cells));}catch{}
+  },[cells]);
+
+  // Load Google Maps
+  useEffect(()=>{
+    const apiKey=process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
+    if(!apiKey)return;
+    if(window.google?.maps){initMap();return;}
+    const existing=document.getElementById('tf-gmaps');
+    if(existing){if(window.google?.maps)initMap();else existing.addEventListener('load',initMap);return;}
+    const s=document.createElement('script');
+    s.id='tf-gmaps';
+    s.src=`https://maps.googleapis.com/maps/api/js?key=${apiKey}`;
+    s.async=true;
+    s.onload=initMap;
+    document.head.appendChild(s);
+    return()=>{};
+  },[]);
+
+  function initMap(){
+    if(!mapRef.current||mapInstance.current)return;
+    mapInstance.current=new window.google.maps.Map(mapRef.current,{
+      center:{lat:39.8283,lng:-98.5795},
+      zoom:5,
+      mapTypeId:'satellite',
+      tilt:0,
+      disableDefaultUI:false,
+      zoomControl:true,
+      streetViewControl:false,
+      mapTypeControl:false,
+      fullscreenControl:false,
+    });
+    mapInstance.current.addListener('zoom_changed',()=>{
+      setZoom(mapInstance.current.getZoom());
+    });
+    setMapLoaded(true);
+  }
+
+  function handleCellClick(idx:number){
+    if(selected){
+      setCells(prev=>({...prev,[idx]:{emoji:selected.emoji,name:selected.name}}));
+    } else {
+      setCells(prev=>{const n={...prev};delete n[idx];return n;});
+    }
+  }
+
+  function handleCellDrop(idx:number){
+    const t=dragTile.current;
+    if(!t)return;
+    setCells(prev=>({...prev,[idx]:{emoji:t.emoji,name:t.name}}));
+    dragTile.current=null;
+  }
+
+  function clearCanvas(){
+    if(confirm('Clear all tiles from canvas?')){setCells({});}}
+
+  const cats=Array.from(new Set(CANVAS_TILES.map(t=>t.cat)));
+  const paletteItems=CANVAS_TILES.filter(t=>t.cat===activeCat);
+  const placedCount=Object.keys(cells).length;
+
+  return(
+    <div style={{position:'fixed',inset:0,zIndex:9000,background:'rgba(4,14,8,0.97)',display:'flex',flexDirection:'column',fontFamily:"'Inter',sans-serif"}}>
+
+      {/* Top bar */}
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'14px 20px',
+        borderBottom:'1px solid rgba(0,255,170,0.15)',background:'rgba(10,31,21,0.95)',flexShrink:0,gap:12,flexWrap:'wrap'}}>
+        <div style={{display:'flex',alignItems:'center',gap:12}}>
+          <span style={{fontFamily:"'Space Grotesk',sans-serif",fontWeight:700,fontSize:16,color:'#00ffaa'}}>🗺️ Property Canvas</span>
+          <span style={{fontSize:12,color:'rgba(0,255,170,0.5)',background:'rgba(0,255,170,0.08)',
+            border:'1px solid rgba(0,255,170,0.15)',borderRadius:99,padding:'3px 10px'}}>
+            {placedCount} tile{placedCount!==1?'s':''} placed
+          </span>
+        </div>
+        <div style={{display:'flex',gap:8,alignItems:'center'}}>
+          <button onClick={clearCanvas} style={{padding:'7px 14px',borderRadius:8,cursor:'pointer',
+            background:'rgba(255,80,80,0.1)',border:'1px solid rgba(255,80,80,0.25)',
+            color:'#ff8080',fontSize:12,fontWeight:600}}>Clear</button>
+          <button onClick={onClose} style={{padding:'7px 14px',borderRadius:8,cursor:'pointer',
+            background:'rgba(0,255,170,0.1)',border:'1px solid rgba(0,255,170,0.25)',
+            color:'#00ffaa',fontSize:12,fontWeight:600}}>✕ Close</button>
+        </div>
+      </div>
+
+      {/* Main body */}
+      <div style={{display:'flex',flex:1,overflow:'hidden',minHeight:0}}>
+
+        {/* Left sidebar — tile palette */}
+        <div style={{width:220,flexShrink:0,display:'flex',flexDirection:'column',
+          borderRight:'1px solid rgba(0,255,170,0.12)',background:'rgba(8,22,14,0.95)',overflow:'hidden'}}>
+
+          {/* Selected tile indicator */}
+          <div style={{padding:'12px 14px',borderBottom:'1px solid rgba(0,255,170,0.1)',flexShrink:0}}>
+            {selected?(
+              <div style={{display:'flex',alignItems:'center',gap:8,padding:'8px 12px',
+                background:'rgba(0,255,170,0.1)',border:'1px solid rgba(0,255,170,0.3)',borderRadius:10}}>
+                <span style={{fontSize:20}}>{selected.emoji}</span>
+                <div>
+                  <div style={{fontSize:12,fontWeight:700,color:'#00ffaa'}}>{selected.name}</div>
+                  <div style={{fontSize:10,color:'rgba(0,255,170,0.5)'}}>Click grid to place · Click again to deselect</div>
+                </div>
+              </div>
+            ):(
+              <div style={{fontSize:11,color:'rgba(170,240,210,0.4)',textAlign:'center',padding:'6px 0'}}>
+                Select a tile below, then click the grid — or drag tiles directly
+              </div>
+            )}
+          </div>
+
+          {/* Category tabs */}
+          <div style={{display:'flex',flexWrap:'wrap',gap:4,padding:'10px 10px 6px',flexShrink:0}}>
+            {cats.map(cat=>(
+              <button key={cat} onClick={()=>setActiveCat(cat)}
+                style={{padding:'4px 9px',borderRadius:99,fontSize:10,fontWeight:700,cursor:'pointer',
+                  background:activeCat===cat?CAT_COLORS[cat]:'rgba(255,255,255,0.05)',
+                  border:`1px solid ${activeCat===cat?CAT_COLORS[cat]:'rgba(255,255,255,0.1)'}`,
+                  color:activeCat===cat?'#0a1f15':'rgba(200,230,212,0.7)'}}>
+                {CAT_LABELS[cat]}
+              </button>
+            ))}
+          </div>
+
+          {/* Tile list */}
+          <div style={{flex:1,overflowY:'auto',padding:'6px 10px 16px'}}>
+            {paletteItems.map(tile=>(
+              <div key={tile.emoji+tile.name}
+                draggable
+                onDragStart={()=>{dragTile.current={emoji:tile.emoji,name:tile.name};}}
+                onClick={()=>setSelected(prev=>prev?.emoji===tile.emoji&&prev?.name===tile.name?null:tile)}
+                style={{display:'flex',alignItems:'center',gap:10,padding:'8px 10px',borderRadius:9,cursor:'grab',
+                  marginBottom:3,transition:'background .15s',
+                  background:selected?.emoji===tile.emoji&&selected?.name===tile.name
+                    ?`rgba(${CAT_COLORS[tile.cat].replace('#','').match(/.{2}/g)?.map(h=>parseInt(h,16)).join(',')},0.18)`
+                    :'rgba(255,255,255,0.03)',
+                  border:selected?.emoji===tile.emoji&&selected?.name===tile.name
+                    ?`1px solid ${CAT_COLORS[tile.cat]}44`:'1px solid transparent'}}>
+                <span style={{fontSize:18,lineHeight:1}}>{tile.emoji}</span>
+                <span style={{fontSize:12,color:'rgba(200,230,212,0.8)',fontWeight:500}}>{tile.name}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Centre — map + grid overlay */}
+        <div style={{flex:1,display:'flex',flexDirection:'column',position:'relative',overflow:'hidden'}}>
+
+          {/* Map */}
+          <div ref={mapRef} style={{position:'absolute',inset:0}}/>
+
+          {/* Grid overlay */}
+          <div style={{position:'absolute',inset:0,display:'grid',
+            gridTemplateColumns:`repeat(${CANVAS_GRID},1fr)`,
+            gridTemplateRows:`repeat(${CANVAS_GRID},1fr)`,
+            pointerEvents:'none'}}>
+            {Array.from({length:CANVAS_GRID*CANVAS_GRID},(_,i)=>(
+              <div key={i}
+                onDragOver={e=>{e.preventDefault();setHoveredCell(i);}}
+                onDragLeave={()=>setHoveredCell(null)}
+                onDrop={e=>{e.preventDefault();handleCellDrop(i);setHoveredCell(null);}}
+                onClick={()=>handleCellClick(i)}
+                onMouseEnter={()=>setHoveredCell(i)}
+                onMouseLeave={()=>setHoveredCell(null)}
+                style={{
+                  border:'1px solid rgba(0,255,170,0.12)',
+                  background:hoveredCell===i
+                    ?'rgba(0,255,170,0.18)'
+                    :cells[i]?'rgba(0,0,0,0.45)':'transparent',
+                  display:'flex',alignItems:'center',justifyContent:'center',
+                  cursor:selected?'crosshair':'default',
+                  pointerEvents:'all',
+                  fontSize:cells[i]?Math.max(10,28-Math.floor(zoom/4))+'px':'14px',
+                  transition:'background .1s',
+                  position:'relative',
+                  userSelect:'none',
+                }}>
+                {cells[i]&&(
+                  <span title={cells[i].name} style={{lineHeight:1,filter:'drop-shadow(0 1px 3px rgba(0,0,0,0.8))'}}>
+                    {cells[i].emoji}
+                  </span>
+                )}
+                {hoveredCell===i&&cells[i]&&(
+                  <div style={{position:'absolute',bottom:'100%',left:'50%',transform:'translateX(-50%)',
+                    background:'rgba(10,31,21,0.95)',border:'1px solid rgba(0,255,170,0.3)',
+                    borderRadius:6,padding:'3px 8px',fontSize:10,color:'#00ffaa',whiteSpace:'nowrap',
+                    pointerEvents:'none',zIndex:10,marginBottom:2}}>
+                    {cells[i].name}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+
+          {/* Map hint */}
+          {!mapLoaded&&(
+            <div style={{position:'absolute',inset:0,display:'flex',alignItems:'center',justifyContent:'center',
+              background:'rgba(4,14,8,0.85)'}}>
+              <div style={{textAlign:'center'}}>
+                <div style={{fontSize:32,marginBottom:12}}>🛰️</div>
+                <div style={{color:'#00ffaa',fontWeight:600,fontSize:14}}>Loading satellite map…</div>
+              </div>
+            </div>
+          )}
+
+          {/* Instructions overlay (fade after first interaction) */}
+          {mapLoaded&&placedCount===0&&(
+            <div style={{position:'absolute',bottom:20,left:'50%',transform:'translateX(-50%)',
+              background:'rgba(10,31,21,0.92)',border:'1px solid rgba(0,255,170,0.2)',
+              borderRadius:12,padding:'10px 20px',fontSize:12,color:'rgba(0,255,170,0.7)',
+              pointerEvents:'none',whiteSpace:'nowrap',zIndex:10}}>
+              📍 Pan &amp; zoom to your property · Select a tile from the left · Click or drag onto the grid
+            </div>
+          )}
+        </div>
+
+        {/* Right sidebar — legend */}
+        <div style={{width:160,flexShrink:0,borderLeft:'1px solid rgba(0,255,170,0.12)',
+          background:'rgba(8,22,14,0.95)',overflowY:'auto',padding:'14px 12px'}}>
+          <div style={{fontSize:10,fontWeight:700,color:'rgba(0,255,170,0.5)',
+            letterSpacing:'.1em',textTransform:'uppercase',marginBottom:10}}>Legend</div>
+          {cats.map(cat=>(
+            <div key={cat} style={{marginBottom:6}}>
+              <div style={{fontSize:10,fontWeight:700,color:CAT_COLORS[cat],marginBottom:3}}>{CAT_LABELS[cat]}</div>
+              {CANVAS_TILES.filter(t=>t.cat===cat).map(t=>(
+                <div key={t.emoji+t.name} style={{display:'flex',alignItems:'center',gap:6,marginBottom:2}}>
+                  <span style={{fontSize:13}}>{t.emoji}</span>
+                  <span style={{fontSize:10,color:'rgba(170,240,210,0.6)'}}>{t.name}</span>
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
 function OnboardingOverlay({onDone}:{onDone:()=>void}){
   const[step,setStep]=useState(0);
   const s=ONBOARDING_STEPS[step];
@@ -5733,6 +6017,7 @@ export default function TerraForgeHome(){
   // While plan is fetching and user is logged in, assume pro to prevent flash of locked content
   const isPro = (isLoggedIn && planLoading) || plan === 'pro' || (!!supaUser?.email && ADMIN_EMAILS.includes(supaUser.email.toLowerCase()));
   const [paywallFeature, setPaywallFeature] = useState<string|null>(null);
+  const [canvasOpen, setCanvasOpen] = useState(false);
   const [pdfExportCount, setPdfExportCount] = useState(0);
   const [showShoppingList, setShowShoppingList] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
@@ -9528,16 +9813,26 @@ export default function TerraForgeHome(){
                     Enter your address to get a satellite view and AI analysis of your property.
                   </p>
                 </div>
-                {propertyData&&(
-                  <button type="button" onClick={printPropertyReport}
+                <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+                  <button type="button" onClick={()=>requirePro('Property Canvas')&&setCanvasOpen(true)}
                     style={{display:'flex',alignItems:'center',gap:8,padding:'10px 20px',
                       borderRadius:12,cursor:'pointer',
-                      background:'linear-gradient(135deg,rgba(0,255,170,0.12),rgba(0,255,170,0.06))',
-                      border:'1px solid rgba(0,255,170,0.30)',color:'var(--tf)',
+                      background:'linear-gradient(135deg,rgba(0,255,170,0.15),rgba(0,255,170,0.08))',
+                      border:'1px solid rgba(0,255,170,0.40)',color:'#00ffaa',
                       fontSize:13,fontWeight:700,fontFamily:"'Space Grotesk',sans-serif"}}>
-                    <Download style={{width:14,height:14}}/> Print Report
+                    🗺️ Property Canvas
                   </button>
-                )}
+                  {propertyData&&(
+                    <button type="button" onClick={printPropertyReport}
+                      style={{display:'flex',alignItems:'center',gap:8,padding:'10px 20px',
+                        borderRadius:12,cursor:'pointer',
+                        background:'linear-gradient(135deg,rgba(0,255,170,0.12),rgba(0,255,170,0.06))',
+                        border:'1px solid rgba(0,255,170,0.30)',color:'var(--tf)',
+                        fontSize:13,fontWeight:700,fontFamily:"'Space Grotesk',sans-serif"}}>
+                      <Download style={{width:14,height:14}}/> Print Report
+                    </button>
+                  )}
+                </div>
               </div>
 
               {/* Address input card */}
@@ -10498,6 +10793,14 @@ export default function TerraForgeHome(){
             isLoggedIn={isLoggedIn}
             accessToken={supaSession?.access_token}
             onLogin={()=>{setPaywallFeature(null);setShowLogin(true);}}
+          />
+        )}
+
+        {canvasOpen&&(
+          <PropertyCanvas
+            onClose={()=>setCanvasOpen(false)}
+            isPro={isPro}
+            onPaywall={()=>{setCanvasOpen(false);setPaywallFeature('Property Canvas');}}
           />
         )}
 
