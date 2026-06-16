@@ -2289,41 +2289,40 @@ const CANVAS_TILES=[
   {name:'Food Forest',emoji:'🌳',cat:'bio'},{name:'Hedgerow',emoji:'🌿',cat:'bio'},
 ];
 const CAT_COLORS:Record<string,string>={food:'#00ffaa',water:'#00d4ff',energy:'#facc15',soil:'#d97706',animals:'#f472b6',bio:'#a78bfa'};
-const CAT_LABELS:Record<string,string>={food:'Food',water:'Water',energy:'Energy',soil:'Soil',animals:'Animals',bio:'Biodiversity'};
-const CANVAS_GRID=16;
-
+const CAT_LABELS:Record<string,string>={food:'Food',water:'Water',energy:'Energy',soil:'Soil',animals:'Animals',bio:'Bio'};
+const CANVAS_GRID=14;
 type CanvasCell={emoji:string;name:string};
 type CanvasState=Record<number,CanvasCell>;
-
 declare global{interface Window{google:any;}}
 
-function PropertyCanvas({onClose,isPro,onPaywall,initialAddress}:{onClose:()=>void;isPro:boolean;onPaywall:()=>void;initialAddress:string}){
+function PropertyCanvas({isPro,onPaywall,address}:{isPro:boolean;onPaywall:()=>void;address:string}){
   const mapRef=useRef<HTMLDivElement>(null);
   const mapInstance=useRef<any>(null);
   const geocoderRef=useRef<any>(null);
+  const didInit=useRef(false);
   const [cells,setCells]=useState<CanvasState>(()=>{
     try{const s=localStorage.getItem('tf-canvas-v1');return s?JSON.parse(s):{};}catch{return {};}
   });
   const [selected,setSelected]=useState<{emoji:string;name:string}|null>(null);
-  const [activeCat,setActiveCat]=useState<string>('food');
+  const [activeCat,setActiveCat]=useState('food');
   const [mapLoaded,setMapLoaded]=useState(false);
-  const [hoveredCell,setHoveredCell]=useState<number|null>(null);
-  const [searchAddr,setSearchAddr]=useState(initialAddress||'');
   const [placingMode,setPlacingMode]=useState(false);
+  const [hoveredCell,setHoveredCell]=useState<number|null>(null);
+  const [searchAddr,setSearchAddr]=useState(address||'');
   const dragTile=useRef<{emoji:string;name:string}|null>(null);
-  const overlayRef=useRef<HTMLDivElement>(null);
 
-  // Persist cells
+  // Persist cells to localStorage — canvas survives close/reopen
   useEffect(()=>{try{localStorage.setItem('tf-canvas-v1',JSON.stringify(cells));}catch{}},[cells]);
 
-  // Load Google Maps — re-init every time canvas opens
+  // Init map once on mount
   useEffect(()=>{
+    if(didInit.current)return;
     const apiKey=process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
-    if(!apiKey){console.warn('NEXT_PUBLIC_GOOGLE_MAPS_API_KEY not set');return;}
-    mapInstance.current=null;
+    if(!apiKey)return;
 
-    function doInitMap(){
-      // Wait for DOM node to be ready
+    function boot(){
+      if(didInit.current)return;
+      didInit.current=true;
       setTimeout(()=>{
         if(!mapRef.current)return;
         const map=new window.google.maps.Map(mapRef.current,{
@@ -2332,221 +2331,211 @@ function PropertyCanvas({onClose,isPro,onPaywall,initialAddress}:{onClose:()=>vo
           mapTypeId:'satellite',
           tilt:0,
           gestureHandling:'greedy',
-          disableDefaultUI:false,
           zoomControl:true,
           streetViewControl:false,
           mapTypeControl:false,
           fullscreenControl:false,
         });
         mapInstance.current=map;
-        const geocoder=new window.google.maps.Geocoder();
-        geocoderRef.current=geocoder;
+        const gc=new window.google.maps.Geocoder();
+        geocoderRef.current=gc;
         setMapLoaded(true);
-        if(initialAddress.trim()){
-          geocoder.geocode({address:initialAddress},(results:any,status:any)=>{
-            if(status==='OK'&&results[0]){
-              map.setCenter(results[0].geometry.location);
-              map.setZoom(19);
-            }
+        if(address.trim()){
+          gc.geocode({address},(r:any,s:any)=>{
+            if(s==='OK'&&r[0]){map.setCenter(r[0].geometry.location);map.setZoom(19);}
           });
         }
       },80);
     }
 
-    if(window.google?.maps){doInitMap();return;}
-    const existing=document.getElementById('tf-gmaps-script');
-    if(existing){
-      if(window.google?.maps){doInitMap();}
-      else{existing.addEventListener('load',doInitMap,{once:true} as any);}
-      return;
-    }
+    if(window.google?.maps){boot();return;}
+    const ex=document.getElementById('tf-gmaps-script');
+    if(ex){ex.addEventListener('load',boot,{once:true} as any);return;}
     const s=document.createElement('script');
     s.id='tf-gmaps-script';
     s.src=`https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places`;
     s.async=true;
-    s.onload=doInitMap;
+    s.onload=boot;
     document.head.appendChild(s);
   },[]);
 
-  function searchAddress(){
-    if(!geocoderRef.current||!searchAddr.trim())return;
-    geocoderRef.current.geocode({address:searchAddr},(results:any,status:any)=>{
-      if(status==='OK'&&results[0]&&mapInstance.current){
-        mapInstance.current.setCenter(results[0].geometry.location);
-        mapInstance.current.setZoom(19);
-      }else{alert('Address not found — try a more specific address.');}
+  function goToAddress(){
+    if(!searchAddr.trim()||!geocoderRef.current||!mapInstance.current)return;
+    geocoderRef.current.geocode({address:searchAddr},(r:any,s:any)=>{
+      if(s==='OK'&&r[0]){mapInstance.current.setCenter(r[0].geometry.location);mapInstance.current.setZoom(19);}
+      else alert('Address not found — try a more specific address.');
     });
   }
 
-  function handleCellClick(idx:number){
-    if(selected){
-      setCells(prev=>({...prev,[idx]:{emoji:selected.emoji,name:selected.name}}));
-    }else{
-      // No tile selected + click = erase
-      setCells(prev=>{const n={...prev};delete n[idx];return n;});
-    }
+  function handleCellClick(i:number){
+    if(!placingMode)return;
+    if(selected) setCells(p=>({...p,[i]:{emoji:selected.emoji,name:selected.name}}));
+    else setCells(p=>{const n={...p};delete n[i];return n;});
   }
 
-  function handleCellDrop(idx:number){
+  function handleDrop(i:number){
     const t=dragTile.current;
     if(!t)return;
-    setCells(prev=>({...prev,[idx]:{emoji:t.emoji,name:t.name}}));
+    setCells(p=>({...p,[i]:{emoji:t.emoji,name:t.name}}));
     dragTile.current=null;
+    setPlacingMode(true);
   }
 
-  function clearCanvas(){if(confirm('Clear all tiles from canvas?')){setCells({});}}
-
   const cats=Array.from(new Set(CANVAS_TILES.map(t=>t.cat)));
-  const paletteItems=CANVAS_TILES.filter(t=>t.cat===activeCat);
   const placedCount=Object.keys(cells).length;
 
-  return(
-    <div style={{position:'fixed',inset:0,zIndex:9000,background:'rgba(4,14,8,0.97)',display:'flex',flexDirection:'column',fontFamily:"'Inter',sans-serif"}}>
+  if(!isPro) return(
+    <div style={{borderRadius:20,padding:'40px 32px',textAlign:'center',
+      background:'linear-gradient(135deg,rgba(0,255,170,0.04),rgba(4,14,8,0.95))',
+      border:'1px solid rgba(0,255,170,0.14)'}}>
+      <div style={{fontSize:36,marginBottom:12}}>🗺️</div>
+      <h3 style={{fontFamily:"'Space Grotesk',sans-serif",fontSize:18,fontWeight:700,
+        color:'var(--tp)',margin:'0 0 8px'}}>Property Canvas</h3>
+      <p style={{fontSize:13,color:'var(--ts)',lineHeight:1.6,maxWidth:380,margin:'0 auto 24px'}}>
+        Drag &amp; drop homestead tiles onto a live satellite view of your property. Pro only.
+      </p>
+      <button onClick={onPaywall} style={{padding:'11px 28px',borderRadius:12,cursor:'pointer',
+        background:'linear-gradient(135deg,#00ffaa,#00c47a)',border:'none',
+        color:'#0a1f15',fontSize:14,fontWeight:800,fontFamily:"'Space Grotesk',sans-serif"}}>
+        Upgrade to Pro
+      </button>
+    </div>
+  );
 
-      {/* Top bar */}
-      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 16px',
-        borderBottom:'1px solid rgba(0,255,170,0.15)',background:'rgba(10,31,21,0.98)',flexShrink:0,gap:10,flexWrap:'wrap'}}>
-        <div style={{display:'flex',alignItems:'center',gap:10}}>
-          <span style={{fontFamily:"'Space Grotesk',sans-serif",fontWeight:700,fontSize:15,color:'#00ffaa'}}>🗺️ Property Canvas</span>
-          <span style={{fontSize:11,color:'rgba(0,255,170,0.5)',background:'rgba(0,255,170,0.08)',
-            border:'1px solid rgba(0,255,170,0.15)',borderRadius:99,padding:'2px 9px'}}>
-            {placedCount} tile{placedCount!==1?'s':''} placed
-          </span>
-        </div>
+  return(
+    <div style={{borderRadius:20,overflow:'hidden',border:'1px solid rgba(0,255,170,0.18)',
+      background:'rgba(8,22,14,0.97)'}}>
+
+      {/* Canvas toolbar */}
+      <div style={{display:'flex',alignItems:'center',gap:10,padding:'12px 16px',
+        borderBottom:'1px solid rgba(0,255,170,0.12)',flexWrap:'wrap',
+        background:'rgba(10,31,21,0.98)'}}>
+        <span style={{fontFamily:"'Space Grotesk',sans-serif",fontWeight:700,
+          fontSize:13,color:'#00ffaa',flexShrink:0}}>🗺️ Property Canvas</span>
+        <span style={{fontSize:11,color:'rgba(0,255,170,0.45)',
+          background:'rgba(0,255,170,0.07)',border:'1px solid rgba(0,255,170,0.15)',
+          borderRadius:99,padding:'2px 8px',flexShrink:0}}>
+          {placedCount} tile{placedCount!==1?'s':''}
+        </span>
         {/* Address search */}
-        <div style={{display:'flex',gap:6,flex:'1 1 280px',maxWidth:420}}>
+        <div style={{display:'flex',gap:6,flex:'1 1 200px',maxWidth:360}}>
           <input value={searchAddr} onChange={e=>setSearchAddr(e.target.value)}
-            onKeyDown={e=>{if(e.key==='Enter')searchAddress();}}
-            placeholder="Search address or pan the map…"
-            style={{flex:1,padding:'7px 12px',borderRadius:8,fontSize:12,
-              background:'rgba(0,255,170,0.05)',border:'1px solid rgba(0,255,170,0.2)',
-              color:'#d2fcea',outline:'none',fontFamily:"'Inter',sans-serif"}}/>
-          <button onClick={searchAddress}
-            style={{padding:'7px 14px',borderRadius:8,cursor:'pointer',flexShrink:0,
-              background:'rgba(0,255,170,0.15)',border:'1px solid rgba(0,255,170,0.35)',
-              color:'#00ffaa',fontSize:12,fontWeight:700}}>Go</button>
+            onKeyDown={e=>{if(e.key==='Enter')goToAddress();}}
+            placeholder="Jump to address…"
+            style={{flex:1,padding:'6px 10px',borderRadius:8,fontSize:12,
+              background:'rgba(0,255,170,0.04)',border:'1px solid rgba(0,255,170,0.18)',
+              color:'#d2fcea',outline:'none',fontFamily:"'Inter',sans-serif",minWidth:0}}/>
+          <button onClick={goToAddress} style={{padding:'6px 12px',borderRadius:8,
+            cursor:'pointer',flexShrink:0,background:'rgba(0,255,170,0.12)',
+            border:'1px solid rgba(0,255,170,0.3)',color:'#00ffaa',fontSize:12,fontWeight:700}}>Go</button>
         </div>
-        <div style={{display:'flex',gap:6,alignItems:'center'}}>
-          {/* Place mode toggle */}
-          <button onClick={()=>setPlacingMode(p=>!p)}
-            style={{padding:'7px 14px',borderRadius:8,cursor:'pointer',
-              background:placingMode?'rgba(0,255,170,0.2)':'rgba(255,255,255,0.06)',
-              border:`1px solid ${placingMode?'rgba(0,255,170,0.5)':'rgba(255,255,255,0.15)'}`,
-              color:placingMode?'#00ffaa':'rgba(200,230,212,0.6)',fontSize:12,fontWeight:700}}>
-            {placingMode?'✏️ Placing':'🖐 Navigate'}
-          </button>
-          <button onClick={clearCanvas} style={{padding:'7px 12px',borderRadius:8,cursor:'pointer',
-            background:'rgba(255,80,80,0.1)',border:'1px solid rgba(255,80,80,0.25)',
-            color:'#ff8080',fontSize:12,fontWeight:600}}>Clear</button>
-          <button onClick={onClose} style={{padding:'7px 12px',borderRadius:8,cursor:'pointer',
-            background:'rgba(0,255,170,0.1)',border:'1px solid rgba(0,255,170,0.25)',
-            color:'#00ffaa',fontSize:12,fontWeight:600}}>✕ Close</button>
-        </div>
+        {/* Mode toggle */}
+        <button onClick={()=>setPlacingMode(p=>!p)} style={{padding:'6px 12px',borderRadius:8,
+          cursor:'pointer',flexShrink:0,fontSize:12,fontWeight:700,
+          background:placingMode?'rgba(0,255,170,0.18)':'rgba(255,255,255,0.05)',
+          border:`1px solid ${placingMode?'rgba(0,255,170,0.45)':'rgba(255,255,255,0.12)'}`,
+          color:placingMode?'#00ffaa':'rgba(200,230,212,0.5)'}}>
+          {placingMode?'✏️ Placing':'🖐 Navigate'}
+        </button>
+        <button onClick={()=>{if(confirm('Clear all canvas tiles?'))setCells({});}} style={{
+          padding:'6px 10px',borderRadius:8,cursor:'pointer',flexShrink:0,
+          background:'rgba(255,80,80,0.08)',border:'1px solid rgba(255,80,80,0.2)',
+          color:'#ff8080',fontSize:12,fontWeight:600}}>Clear</button>
       </div>
 
-      {/* Main body */}
-      <div style={{display:'flex',flex:1,overflow:'hidden',minHeight:0}}>
+      {/* Canvas body — map + palette side by side */}
+      <div style={{display:'flex',height:520}}>
 
-        {/* Left sidebar */}
-        <div style={{width:200,flexShrink:0,display:'flex',flexDirection:'column',
-          borderRight:'1px solid rgba(0,255,170,0.12)',background:'rgba(8,22,14,0.98)',overflow:'hidden'}}>
+        {/* Tile palette — left */}
+        <div style={{width:176,flexShrink:0,display:'flex',flexDirection:'column',
+          borderRight:'1px solid rgba(0,255,170,0.1)',overflowY:'auto'}}>
 
-          {/* Selected tile */}
-          <div style={{padding:'10px 12px',borderBottom:'1px solid rgba(0,255,170,0.1)',flexShrink:0,minHeight:56}}>
+          {/* Selected tile chip */}
+          <div style={{padding:'8px 10px',borderBottom:'1px solid rgba(0,255,170,0.08)',flexShrink:0,minHeight:48}}>
             {selected?(
-              <div style={{display:'flex',alignItems:'center',gap:8,padding:'7px 10px',
-                background:'rgba(0,255,170,0.1)',border:'1px solid rgba(0,255,170,0.3)',borderRadius:9}}>
-                <span style={{fontSize:20}}>{selected.emoji}</span>
-                <div>
-                  <div style={{fontSize:11,fontWeight:700,color:'#00ffaa'}}>{selected.name}</div>
-                  <div style={{fontSize:9,color:'rgba(0,255,170,0.45)'}}>Click grid to place</div>
-                </div>
-                <button onClick={()=>setSelected(null)}
-                  style={{marginLeft:'auto',background:'none',border:'none',color:'rgba(0,255,170,0.5)',cursor:'pointer',fontSize:14,lineHeight:1}}>✕</button>
+              <div style={{display:'flex',alignItems:'center',gap:6,padding:'5px 8px',
+                background:'rgba(0,255,170,0.1)',border:'1px solid rgba(0,255,170,0.3)',borderRadius:8}}>
+                <span style={{fontSize:18}}>{selected.emoji}</span>
+                <span style={{fontSize:10,fontWeight:700,color:'#00ffaa',flex:1,lineHeight:1.2}}>{selected.name}</span>
+                <button onClick={()=>setSelected(null)} style={{background:'none',border:'none',
+                  color:'rgba(0,255,170,0.4)',cursor:'pointer',fontSize:12,padding:0,lineHeight:1}}>✕</button>
               </div>
             ):(
-              <div style={{fontSize:10,color:'rgba(170,240,210,0.35)',textAlign:'center',padding:'8px 0',lineHeight:1.5}}>
-                Select a tile below<br/>then click the grid
-              </div>
+              <div style={{fontSize:9,color:'rgba(170,240,210,0.3)',textAlign:'center',
+                lineHeight:1.5,paddingTop:4}}>Select a tile<br/>then click grid</div>
             )}
           </div>
 
           {/* Category tabs */}
-          <div style={{display:'flex',flexWrap:'wrap',gap:3,padding:'8px 8px 4px',flexShrink:0}}>
+          <div style={{display:'flex',flexWrap:'wrap',gap:2,padding:'6px 8px 4px',flexShrink:0}}>
             {cats.map(cat=>(
               <button key={cat} onClick={()=>setActiveCat(cat)}
-                style={{padding:'3px 8px',borderRadius:99,fontSize:9,fontWeight:700,cursor:'pointer',
-                  background:activeCat===cat?CAT_COLORS[cat]:'rgba(255,255,255,0.05)',
-                  border:`1px solid ${activeCat===cat?CAT_COLORS[cat]:'rgba(255,255,255,0.1)'}`,
-                  color:activeCat===cat?'#0a1f15':'rgba(200,230,212,0.6)'}}>
+                style={{padding:'2px 7px',borderRadius:99,fontSize:9,fontWeight:700,cursor:'pointer',
+                  background:activeCat===cat?CAT_COLORS[cat]:'rgba(255,255,255,0.04)',
+                  border:`1px solid ${activeCat===cat?CAT_COLORS[cat]:'rgba(255,255,255,0.08)'}`,
+                  color:activeCat===cat?'#0a1f15':'rgba(200,230,212,0.5)'}}>
                 {CAT_LABELS[cat]}
               </button>
             ))}
           </div>
 
-          {/* Tile list */}
-          <div style={{flex:1,overflowY:'auto',padding:'4px 8px 16px'}}>
-            {paletteItems.map(tile=>{
+          {/* Tiles */}
+          <div style={{flex:1,overflowY:'auto',padding:'2px 6px 12px'}}>
+            {CANVAS_TILES.filter(t=>t.cat===activeCat).map(tile=>{
               const isSel=selected?.emoji===tile.emoji&&selected?.name===tile.name;
               return(
-                <div key={tile.emoji+tile.name}
+                <div key={tile.name}
                   draggable
-                  onDragStart={()=>{dragTile.current={emoji:tile.emoji,name:tile.name};setPlacingMode(true);}}
+                  onDragStart={()=>{dragTile.current={emoji:tile.emoji,name:tile.name};}}
                   onClick={()=>{setSelected(isSel?null:tile);if(!isSel)setPlacingMode(true);}}
-                  style={{display:'flex',alignItems:'center',gap:8,padding:'6px 8px',borderRadius:8,cursor:'grab',
-                    marginBottom:2,
-                    background:isSel?'rgba(0,255,170,0.12)':'rgba(255,255,255,0.02)',
-                    border:`1px solid ${isSel?'rgba(0,255,170,0.4)':'transparent'}`}}>
-                  <span style={{fontSize:16,lineHeight:1}}>{tile.emoji}</span>
-                  <span style={{fontSize:11,color:'rgba(200,230,212,0.75)',fontWeight:500}}>{tile.name}</span>
+                  style={{display:'flex',alignItems:'center',gap:7,padding:'5px 7px',
+                    borderRadius:7,cursor:'grab',marginBottom:1,
+                    background:isSel?'rgba(0,255,170,0.1)':'rgba(255,255,255,0.02)',
+                    border:`1px solid ${isSel?'rgba(0,255,170,0.35)':'transparent'}`}}>
+                  <span style={{fontSize:15,lineHeight:1}}>{tile.emoji}</span>
+                  <span style={{fontSize:10,color:'rgba(200,230,212,0.7)',fontWeight:isSel?700:400}}>{tile.name}</span>
                 </div>
               );
             })}
           </div>
         </div>
 
-        {/* Centre — map + grid overlay */}
-        <div style={{flex:1,position:'relative',overflow:'hidden'}}>
+        {/* Map + grid overlay — right */}
+        <div style={{flex:1,position:'relative'}}>
 
-          {/* Google Map — always full size, pointer events always on */}
+          {/* Google Map */}
           <div ref={mapRef} style={{position:'absolute',inset:0,zIndex:0}}/>
 
-          {/* Grid overlay — pointer-events only when in placing mode */}
-          <div ref={overlayRef}
-            style={{position:'absolute',inset:0,zIndex:1,display:'grid',
-              gridTemplateColumns:`repeat(${CANVAS_GRID},1fr)`,
-              gridTemplateRows:`repeat(${CANVAS_GRID},1fr)`,
-              pointerEvents:placingMode?'all':'none'}}>
+          {/* Grid overlay — invisible to mouse in navigate mode */}
+          <div style={{position:'absolute',inset:0,zIndex:1,
+            display:'grid',
+            gridTemplateColumns:`repeat(${CANVAS_GRID},1fr)`,
+            gridTemplateRows:`repeat(${CANVAS_GRID},1fr)`,
+            pointerEvents:placingMode?'all':'none'}}>
             {Array.from({length:CANVAS_GRID*CANVAS_GRID},(_,i)=>(
               <div key={i}
                 onDragOver={e=>{e.preventDefault();setHoveredCell(i);}}
                 onDragLeave={()=>setHoveredCell(null)}
-                onDrop={e=>{e.preventDefault();handleCellDrop(i);setHoveredCell(null);}}
+                onDrop={e=>{e.preventDefault();handleDrop(i);setHoveredCell(null);}}
                 onClick={()=>handleCellClick(i)}
                 onMouseEnter={()=>setHoveredCell(i)}
                 onMouseLeave={()=>setHoveredCell(null)}
-                style={{
-                  border:`1px solid rgba(0,255,170,${placingMode?0.18:0.08})`,
-                  background:hoveredCell===i
-                    ?'rgba(0,255,170,0.2)'
-                    :cells[i]?'rgba(0,0,0,0.5)':'transparent',
+                style={{border:`1px solid rgba(0,255,170,${placingMode?0.15:0.05})`,
+                  background:hoveredCell===i?'rgba(0,255,170,0.18)':cells[i]?'rgba(0,0,0,0.45)':'transparent',
                   display:'flex',alignItems:'center',justifyContent:'center',
                   cursor:selected?'crosshair':placingMode?'cell':'default',
-                  fontSize:cells[i]?'20px':'14px',
-                  transition:'background .1s',
-                  position:'relative',
-                  userSelect:'none',
-                }}>
+                  position:'relative',userSelect:'none'}}>
                 {cells[i]&&(
-                  <span title={cells[i].name}
-                    style={{lineHeight:1,filter:'drop-shadow(0 1px 4px rgba(0,0,0,0.9))',pointerEvents:'none'}}>
+                  <span style={{fontSize:18,lineHeight:1,
+                    filter:'drop-shadow(0 1px 4px rgba(0,0,0,0.9))',pointerEvents:'none'}}>
                     {cells[i].emoji}
                   </span>
                 )}
                 {hoveredCell===i&&cells[i]&&(
-                  <div style={{position:'absolute',bottom:'calc(100% + 4px)',left:'50%',transform:'translateX(-50%)',
-                    background:'rgba(10,31,21,0.97)',border:'1px solid rgba(0,255,170,0.3)',
-                    borderRadius:6,padding:'3px 8px',fontSize:10,color:'#00ffaa',whiteSpace:'nowrap',
+                  <div style={{position:'absolute',bottom:'calc(100% + 2px)',left:'50%',
+                    transform:'translateX(-50%)',background:'rgba(10,31,21,0.97)',
+                    border:'1px solid rgba(0,255,170,0.25)',borderRadius:5,
+                    padding:'2px 7px',fontSize:9,color:'#00ffaa',whiteSpace:'nowrap',
                     pointerEvents:'none',zIndex:20}}>
                     {cells[i].name}
                   </div>
@@ -2555,51 +2544,34 @@ function PropertyCanvas({onClose,isPro,onPaywall,initialAddress}:{onClose:()=>vo
             ))}
           </div>
 
-          {/* Mode badge */}
-          {mapLoaded&&(
-            <div style={{position:'absolute',bottom:16,left:'50%',transform:'translateX(-50%)',
-              background:'rgba(10,31,21,0.92)',border:'1px solid rgba(0,255,170,0.2)',
-              borderRadius:10,padding:'7px 16px',fontSize:11,color:'rgba(0,255,170,0.7)',
-              pointerEvents:'none',zIndex:10,whiteSpace:'nowrap',textAlign:'center'}}>
-              {placingMode
-                ?`✏️ Place mode — ${selected?`click to place ${selected.emoji}`:'click grid to erase · select a tile to place'}`
-                :'🖐 Navigate mode — pan &amp; zoom freely · click "Placing" to place tiles'}
-            </div>
-          )}
-
-          {/* Loading */}
+          {/* Loading overlay */}
           {!mapLoaded&&(
-            <div style={{position:'absolute',inset:0,display:'flex',alignItems:'center',justifyContent:'center',
-              background:'rgba(4,14,8,0.9)',zIndex:5}}>
+            <div style={{position:'absolute',inset:0,display:'flex',alignItems:'center',
+              justifyContent:'center',background:'rgba(4,14,8,0.92)',zIndex:5}}>
               <div style={{textAlign:'center'}}>
-                <div style={{fontSize:32,marginBottom:12}}>🛰️</div>
-                <div style={{color:'#00ffaa',fontWeight:600,fontSize:14}}>Loading satellite map…</div>
+                <div style={{fontSize:28,marginBottom:10}}>🛰️</div>
+                <div style={{color:'#00ffaa',fontSize:13,fontWeight:600}}>Loading satellite map…</div>
               </div>
             </div>
           )}
-        </div>
 
-        {/* Right legend */}
-        <div style={{width:150,flexShrink:0,borderLeft:'1px solid rgba(0,255,170,0.12)',
-          background:'rgba(8,22,14,0.98)',overflowY:'auto',padding:'12px 10px'}}>
-          <div style={{fontSize:9,fontWeight:700,color:'rgba(0,255,170,0.45)',
-            letterSpacing:'.1em',textTransform:'uppercase',marginBottom:8}}>Legend</div>
-          {cats.map(cat=>(
-            <div key={cat} style={{marginBottom:6}}>
-              <div style={{fontSize:9,fontWeight:700,color:CAT_COLORS[cat],marginBottom:2,textTransform:'uppercase',letterSpacing:'.05em'}}>{CAT_LABELS[cat]}</div>
-              {CANVAS_TILES.filter(t=>t.cat===cat).map(t=>(
-                <div key={t.emoji+t.name} style={{display:'flex',alignItems:'center',gap:5,marginBottom:1}}>
-                  <span style={{fontSize:12}}>{t.emoji}</span>
-                  <span style={{fontSize:9,color:'rgba(170,240,210,0.55)'}}>{t.name}</span>
-                </div>
-              ))}
+          {/* Mode hint */}
+          {mapLoaded&&(
+            <div style={{position:'absolute',bottom:10,left:'50%',transform:'translateX(-50%)',
+              background:'rgba(10,31,21,0.9)',border:'1px solid rgba(0,255,170,0.15)',
+              borderRadius:8,padding:'5px 12px',fontSize:10,color:'rgba(0,255,170,0.6)',
+              pointerEvents:'none',zIndex:10,whiteSpace:'nowrap'}}>
+              {placingMode
+                ?`✏️ ${selected?`Click to place ${selected.emoji} ${selected.name}`:'Click cell to erase · select a tile to place'}`
+                :'🖐 Navigate — pan &amp; zoom freely · switch to Placing to add tiles'}
             </div>
-          ))}
+          )}
         </div>
       </div>
     </div>
   );
 }
+
 function OnboardingOverlay({onDone}:{onDone:()=>void}){
   const[step,setStep]=useState(0);
   const s=ONBOARDING_STEPS[step];
@@ -6071,7 +6043,6 @@ export default function TerraForgeHome(){
   // While plan is fetching and user is logged in, assume pro to prevent flash of locked content
   const isPro = (isLoggedIn && planLoading) || plan === 'pro' || (!!supaUser?.email && ADMIN_EMAILS.includes(supaUser.email.toLowerCase()));
   const [paywallFeature, setPaywallFeature] = useState<string|null>(null);
-  const [canvasOpen, setCanvasOpen] = useState(false);
   const [pdfExportCount, setPdfExportCount] = useState(0);
   const [showShoppingList, setShowShoppingList] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
@@ -9867,26 +9838,16 @@ export default function TerraForgeHome(){
                     Enter your address to get a satellite view and AI analysis of your property.
                   </p>
                 </div>
-                <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
-                  <button type="button" onClick={()=>requirePro('Property Canvas')&&setCanvasOpen(true)}
+                {propertyData&&(
+                  <button type="button" onClick={printPropertyReport}
                     style={{display:'flex',alignItems:'center',gap:8,padding:'10px 20px',
                       borderRadius:12,cursor:'pointer',
-                      background:'linear-gradient(135deg,rgba(0,255,170,0.15),rgba(0,255,170,0.08))',
-                      border:'1px solid rgba(0,255,170,0.40)',color:'#00ffaa',
+                      background:'linear-gradient(135deg,rgba(0,255,170,0.12),rgba(0,255,170,0.06))',
+                      border:'1px solid rgba(0,255,170,0.30)',color:'var(--tf)',
                       fontSize:13,fontWeight:700,fontFamily:"'Space Grotesk',sans-serif"}}>
-                    🗺️ Property Canvas
+                    <Download style={{width:14,height:14}}/> Print Report
                   </button>
-                  {propertyData&&(
-                    <button type="button" onClick={printPropertyReport}
-                      style={{display:'flex',alignItems:'center',gap:8,padding:'10px 20px',
-                        borderRadius:12,cursor:'pointer',
-                        background:'linear-gradient(135deg,rgba(0,255,170,0.12),rgba(0,255,170,0.06))',
-                        border:'1px solid rgba(0,255,170,0.30)',color:'var(--tf)',
-                        fontSize:13,fontWeight:700,fontFamily:"'Space Grotesk',sans-serif"}}>
-                      <Download style={{width:14,height:14}}/> Print Report
-                    </button>
-                  )}
-                </div>
+                )}
               </div>
 
               {/* Address input card */}
@@ -10157,6 +10118,13 @@ export default function TerraForgeHome(){
                   </p>
                 </div>
               )}
+
+            {/* Property Canvas — inline, always visible in Property tab */}
+            <PropertyCanvas
+              isPro={isPro}
+              onPaywall={()=>setPaywallFeature('Property Canvas')}
+              address={propertyAddress}
+            />
 
             </>}
             </div>
@@ -10850,14 +10818,6 @@ export default function TerraForgeHome(){
           />
         )}
 
-        {canvasOpen&&(
-          <PropertyCanvas
-            onClose={()=>setCanvasOpen(false)}
-            isPro={isPro}
-            onPaywall={()=>{setCanvasOpen(false);setPaywallFeature('Property Canvas');}}
-            initialAddress={propertyAddress}
-          />
-        )}
 
       </div>
     </div>
