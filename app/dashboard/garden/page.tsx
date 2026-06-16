@@ -10089,12 +10089,14 @@ export default function TerraForgeHome(){
                 </div>
               )}
 
-            {/* Property Canvas — inline, always visible, tiles persist via localStorage */}
-            <PropertyCanvas
-              isPro={isPro}
-              onPaywall={()=>setPaywallFeature('Property Canvas')}
-              address={propertyAddress}
-            />
+            {/* Property Canvas — shown only after property is analysed */}
+            {propertyData&&(
+              <PropertyCanvas
+                isPro={isPro}
+                onPaywall={()=>setPaywallFeature('Property Canvas')}
+                address={propertyAddress}
+              />
+            )}
 
             </>}
             </div>
