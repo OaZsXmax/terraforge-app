@@ -9519,8 +9519,7 @@ export default function TerraForgeHome(){
                   </div>
                 </div>
               )}
-              {isPro&&(
-              <div>
+              {isPro&&(<>
               {/* Header */}
               <div style={{position:'relative',overflow:'hidden',borderRadius:22,padding:'24px 28px',
                 background:'linear-gradient(135deg,rgba(0,255,170,0.06) 0%,rgba(12,28,18,0.82) 40%,rgba(0,6,18,0.88) 100%)',
@@ -9637,8 +9636,7 @@ export default function TerraForgeHome(){
                   );
                 })}
               </div>
-              </div>
-              )}
+          </>)}
             </div>
           )}
 
@@ -9676,8 +9674,7 @@ export default function TerraForgeHome(){
                   </div>
                 </div>
               )}
-              {isPro&&(
-              <div>
+              {isPro&&(<>
               {/* Header */}
               <div style={{position:'relative',overflow:'hidden',borderRadius:22,padding:'24px 28px',
                 background:'linear-gradient(135deg,rgba(255,176,32,0.08) 0%,rgba(20,12,0,0.90) 40%,rgba(8,6,0,0.88) 100%)',
@@ -9727,8 +9724,7 @@ export default function TerraForgeHome(){
                   </div>
                 )}
               </div>
-              </div>
-              )}
+            </>)}
             </div>
           )}
 
@@ -9771,8 +9767,7 @@ export default function TerraForgeHome(){
                 </div>
               )}
 
-              {isPro&&(
-              <div>
+              {isPro&&<>
               {/* Header */}
               <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',flexWrap:'wrap',gap:12}}>
                 <div>
@@ -9955,9 +9950,6 @@ export default function TerraForgeHome(){
 
 
 
-            {/* Visualiser placeholder — keeps fragment structure for tsc */}
-            <div style={{display:'none'}}/>
-
             {/* Property Canvas — shown only after property is analysed */}
             {propertyData&&(
               <div style={{display:'flex',flexDirection:'column',gap:16}}>
@@ -9996,8 +9988,7 @@ export default function TerraForgeHome(){
               </div>
             )}
 
-            </div>
-            )}
+            </>}
             </div>
           )}
 
