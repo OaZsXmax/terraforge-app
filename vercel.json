@@ -1,0 +1,16 @@
+{
+  "crons": [
+    {
+      "path": "/api/email/cron?job=day3",
+      "schedule": "0 9 * * *"
+    },
+    {
+      "path": "/api/email/cron?job=pro_nudge",
+      "schedule": "0 10 * * *"
+    },
+    {
+      "path": "/api/email/cron?job=seasonal",
+      "schedule": "0 8 1 * *"
+    }
+  ]
+}

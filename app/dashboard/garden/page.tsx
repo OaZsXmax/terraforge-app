@@ -3741,6 +3741,8 @@ function LoginModal({onClose,onLoad,currentData,isPro}:{onClose:()=>void;onLoad:
         // Create profile row now that we have a valid session (RLS requires auth.uid())
         const{error:upsertErr}=await supabase.from('profiles').upsert({id:data.user.id,email:email.trim().toLowerCase(),name:name.trim(),saves:[],plan:'free'});
         if(upsertErr){setError('Account created but profile setup failed — '+upsertErr.message+'. Please contact support.');setLoading(false);return;}
+        // Fire welcome email (non-blocking)
+        try{fetch('/api/email/send',{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${data.session.access_token}`},body:JSON.stringify({type:'welcome',userId:data.user.id,email:email.trim().toLowerCase(),name:name.trim()})}).catch(()=>{});}catch{}
         setUser(data.user);setTab('saves');
       } else {
         // Email confirmation required — can't create profile yet (no session for RLS)
@@ -3845,6 +3847,8 @@ function LoginModal({onClose,onLoad,currentData,isPro}:{onClose:()=>void;onLoad:
     setLoading(false);
     if(saveErr){setError('Save failed — '+saveErr.message);return;}
     setSaves(updated);
+    // Fire save_confirm email (non-blocking)
+    try{supabase.auth.getSession().then(({data:{session}})=>{if(session){fetch('/api/email/send',{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${session.access_token}`},body:JSON.stringify({type:'save_confirm',userId:user.id,email:user.email??'',name:user.user_metadata?.name??user.email??'',blueprintLabel:newSave.label})}).catch(()=>{});}});}catch{}
     const t=document.createElement('div');
     t.style.cssText='position:fixed;bottom:32px;left:50%;transform:translateX(-50%);background:#f0fdf4;color:#15803d;border:1px solid rgba(22,163,74,0.25);border-radius:12px;padding:12px 24px;font-size:13px;font-weight:600;z-index:99999;pointer-events:none;';
     t.textContent='✓ Blueprint saved!';
