@@ -720,7 +720,6 @@ html,body{max-width:100vw;overflow-x:hidden;}
     overscroll-behavior-y:none;
     touch-action:pan-y;
   }
-  body{transform:translateZ(0);}
   html,body,#__next{max-width:100vw;overflow-x:hidden;}
 
   /* Collapse dense fixed grids to 2 columns on phones. React emits
