@@ -834,6 +834,10 @@ let _isDraggingFromLibrary=false; // true while user drags from feature library
 let _touchDropHandler:((slotId:number,emoji:string)=>void)|null=null;
 let _touchDragEmoji='';      // emoji currently being touch-dragged from library
 let _touchDragMoved=false;   // distinguishes a drag from a tap
+let _touchDragArmed=false;   // true once long-press starts an actual drag
+let _touchStartX=0;          // touch origin for scroll-vs-drag detection
+let _touchStartY=0;
+let _touchLongPressTimer=0;  // setTimeout handle for the long-press arm
 
 const CONFLICTS: Record<string,string[]> = {
   '🐔':['🌱','🌼','🐝'], '🐝':['🌬️','🦆'], '🌊':['🥔','🥕','🌱'],
@@ -9193,40 +9197,69 @@ export default function TerraForgeHome(){
                           }}
                           onTouchStart={e=>{
                             // Mobile touch-drag fallback — HTML5 drag is unreliable in WebView.
+                            // We DON'T start a drag yet: record the origin so the list can
+                            // still scroll. A long-press (350ms) arms the drag.
                             if(!isMobile)return;
                             const t=e.touches[0];
-                            _touchDragEmoji=item.emoji;
+                            _touchStartX=t.clientX;_touchStartY=t.clientY;
+                            _touchDragEmoji='';
+                            _touchDragArmed=false;
                             _touchDragMoved=false;
-                            // floating ghost that follows the finger
-                            const ghost=document.createElement('div');
-                            ghost.id='tf-touch-ghost';
-                            ghost.textContent=item.emoji;
-                            ghost.style.cssText='position:fixed;z-index:99999;pointer-events:none;font-size:34px;transform:translate(-50%,-50%);filter:drop-shadow(0 4px 8px rgba(0,0,0,0.5));transition:none;';
-                            ghost.style.left=t.clientX+'px';
-                            ghost.style.top=t.clientY+'px';
-                            document.body.appendChild(ghost);
+                            if(_touchLongPressTimer)clearTimeout(_touchLongPressTimer);
+                            _touchLongPressTimer=window.setTimeout(()=>{
+                              // Long-press held: arm the drag and show the ghost.
+                              _touchDragArmed=true;
+                              _touchDragEmoji=item.emoji;
+                              const ghost=document.createElement('div');
+                              ghost.id='tf-touch-ghost';
+                              ghost.textContent=item.emoji;
+                              ghost.style.cssText='position:fixed;z-index:99999;pointer-events:none;font-size:38px;transform:translate(-50%,-50%);filter:drop-shadow(0 4px 8px rgba(0,0,0,0.5));transition:none;';
+                              ghost.style.left=_touchStartX+'px';
+                              ghost.style.top=_touchStartY+'px';
+                              document.body.appendChild(ghost);
+                              try{navigator.vibrate&&navigator.vibrate(15);}catch{}
+                            },350);
                           }}
                           onTouchMove={e=>{
-                            if(!isMobile||!_touchDragEmoji)return;
-                            _touchDragMoved=true;
+                            if(!isMobile)return;
                             const t=e.touches[0];
+                            const dx=Math.abs(t.clientX-_touchStartX);
+                            const dy=Math.abs(t.clientY-_touchStartY);
+                            // If not yet armed and the finger moved (scrolling), cancel the
+                            // long-press timer and let the browser scroll normally.
+                            if(!_touchDragArmed){
+                              if(dx>8||dy>8){
+                                if(_touchLongPressTimer){clearTimeout(_touchLongPressTimer);_touchLongPressTimer=0;}
+                              }
+                              return;
+                            }
+                            // Drag is armed — take over, prevent scroll, move ghost.
+                            e.preventDefault();
+                            _touchDragMoved=true;
                             const ghost=document.getElementById('tf-touch-ghost');
                             if(ghost){ghost.style.left=t.clientX+'px';ghost.style.top=t.clientY+'px';}
-                            // highlight cell under finger
                             document.querySelectorAll('[data-grid-cell]').forEach(c=>((c as HTMLElement).style.outline=''));
                             const under=document.elementFromPoint(t.clientX,t.clientY) as HTMLElement|null;
                             const cell=under?.closest('[data-grid-cell]') as HTMLElement|null;
                             if(cell)cell.style.outline='2px solid rgba(0,255,170,0.7)';
                           }}
                           onTouchEnd={e=>{
-                            if(!isMobile){return;}
+                            if(!isMobile)return;
+                            if(_touchLongPressTimer){clearTimeout(_touchLongPressTimer);_touchLongPressTimer=0;}
                             const ghost=document.getElementById('tf-touch-ghost');
                             if(ghost)ghost.remove();
                             document.querySelectorAll('[data-grid-cell]').forEach(c=>((c as HTMLElement).style.outline=''));
+                            const wasArmed=_touchDragArmed;
                             const em=_touchDragEmoji;
-                            _touchDragEmoji='';
-                            // A tap (no movement) opens the stats modal, matching desktop click.
-                            if(!_touchDragMoved){setModal({emoji:item.emoji,bpId:activeBp?.id??'',tileId:-1});return;}
+                            _touchDragArmed=false;_touchDragEmoji='';
+                            // Never armed = a tap (or a scroll). A pure tap opens stats.
+                            if(!wasArmed){
+                              const t0=e.changedTouches[0];
+                              const moved=Math.abs(t0.clientX-_touchStartX)>8||Math.abs(t0.clientY-_touchStartY)>8;
+                              if(!moved)setModal({emoji:item.emoji,bpId:activeBp?.id??'',tileId:-1});
+                              return;
+                            }
+                            // Armed drag — drop onto the cell under the finger.
                             const t=e.changedTouches[0];
                             const under=document.elementFromPoint(t.clientX,t.clientY) as HTMLElement|null;
                             const cell=under?.closest('[data-grid-cell]') as HTMLElement|null;
@@ -9240,9 +9273,9 @@ export default function TerraForgeHome(){
                             width:'100%',minHeight:isMobile?46:64,display:'flex',flexDirection:'column',
                             alignItems:'center',gap:isMobile?1:4,padding:isMobile?'4px 2px':'8px 4px 7px',borderRadius:10,
                             cursor:'pointer',
-                            // touch-action:none lets HTML5 drag start instantly on mobile
-                            // instead of waiting out the pan-y long-press delay
-                            touchAction:'none',
+                            // pan-y lets the library scroll vertically; our custom
+                            // touch-drag handlers manage placement onto the grid.
+                            touchAction:'pan-y',
                             background:'rgba(0,255,170,0.04)',
                             border:'1px solid rgba(0,255,170,0.10)',
                             transition:'transform 0.14s cubic-bezier(0.22,1,0.36,1),opacity 0.14s cubic-bezier(0.22,1,0.36,1),border-color 0.14s cubic-bezier(0.22,1,0.36,1),box-shadow 0.14s cubic-bezier(0.22,1,0.36,1)',
@@ -9400,11 +9433,15 @@ export default function TerraForgeHome(){
                           document.body.appendChild(toast);setTimeout(()=>toast.remove(),3000);
                           return;
                         }
-                        // If no blueprint yet, auto-generate from drop
+                        // If no blueprint yet: on mobile just place the tile and STAY on
+                        // the Maps tab (calling onGenerate jumped to the Dashboard, which
+                        // was the reported bug). Desktop keeps its original behaviour.
                         if(!hasData&&!loading){
                           updateBpTiles(bpId,tiles=>[...tiles.filter((t:{id:number;icon:string})=>t.id!==id),{id,icon:em}]);
-                          const featureName=ICON_LOOKUP.get(em)?.name??'feature';
-                          onGenerate({...fv,prompt:`Add a ${featureName} to my homestead`});
+                          if(!isMobile){
+                            const featureName=ICON_LOOKUP.get(em)?.name??'feature';
+                            onGenerate({...fv,prompt:`Add a ${featureName} to my homestead`});
+                          }
                         } else {
                           // Route through addFeatureToActiveMap so budget check fires
                           // We place at specific slot id — override the slot logic by placing directly
