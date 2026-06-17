@@ -697,6 +697,43 @@ html,body{max-width:100vw;overflow-x:hidden;}
 @media(max-width:768px){
   .tf-main{padding:12px 10px 100px;}
 }
+
+/* ============================================================
+   MOBILE PERFORMANCE OVERRIDE  (<=820px)
+   WebView cannot composite heavy backdrop-blur every scroll
+   frame -> flicker + jank. Neutralise blur + perpetual
+   animations on small screens only. Desktop unaffected.
+   ============================================================ */
+@media(max-width:820px){
+  *{
+    backdrop-filter:none !important;
+    -webkit-backdrop-filter:none !important;
+  }
+  *{
+    animation-duration:0s !important;
+    animation-delay:0s !important;
+    animation-iteration-count:1 !important;
+  }
+  .a-fadeUp{animation:none !important;opacity:1 !important;transform:none !important;}
+  html,body{
+    -webkit-overflow-scrolling:touch;
+    overscroll-behavior-y:none;
+    touch-action:pan-y;
+  }
+  body{transform:translateZ(0);}
+  html,body,#__next{max-width:100vw;overflow-x:hidden;}
+
+  /* Collapse dense fixed grids to 2 columns on phones. React emits
+     inline styles as kebab-case in the DOM, so match that form.
+     !important lets the stylesheet win over the inline value. */
+  [style*="grid-template-columns: repeat(4, 1fr)"],
+  [style*="grid-template-columns:repeat(4,1fr)"]{grid-template-columns:repeat(2,1fr) !important;}
+  [style*="grid-template-columns: repeat(3, 1fr)"],
+  [style*="grid-template-columns:repeat(3,1fr)"]{grid-template-columns:repeat(2,1fr) !important;}
+
+  /* Tables scroll inside their own box instead of stretching the page */
+  table{display:block;overflow-x:auto;-webkit-overflow-scrolling:touch;max-width:100%;}
+}
 `;
 
 
