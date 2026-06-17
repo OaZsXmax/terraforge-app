@@ -834,10 +834,10 @@ let _isDraggingFromLibrary=false; // true while user drags from feature library
 let _touchDropHandler:((slotId:number,emoji:string)=>void)|null=null;
 let _touchDragEmoji='';      // emoji currently being touch-dragged from library
 let _touchDragMoved=false;   // distinguishes a drag from a tap
-let _touchDragArmed=false;   // true once long-press starts an actual drag
+let _touchDragArmed=false;   // true once a drag actually starts
+let _touchDecided=false;     // first move has decided scroll-vs-drag
 let _touchStartX=0;          // touch origin for scroll-vs-drag detection
 let _touchStartY=0;
-let _touchLongPressTimer=0;  // setTimeout handle for the long-press arm
 
 const CONFLICTS: Record<string,string[]> = {
   '🐔':['🌱','🌼','🐝'], '🐝':['🌬️','🦆'], '🌊':['🥔','🥕','🌱'],
@@ -9196,70 +9196,68 @@ export default function TerraForgeHome(){
                             document.querySelectorAll('.grid-lib-drag').forEach(el=>el.classList.remove('grid-lib-drag'));
                           }}
                           onTouchStart={e=>{
-                            // Mobile touch-drag fallback — HTML5 drag is unreliable in WebView.
-                            // We DON'T start a drag yet: record the origin so the list can
-                            // still scroll. A long-press (350ms) arms the drag.
+                            // Fluid touch-drag (HTML5 drag is unreliable in WebView).
+                            // Record origin only; we decide scroll-vs-drag on first move.
                             if(!isMobile)return;
                             const t=e.touches[0];
                             _touchStartX=t.clientX;_touchStartY=t.clientY;
-                            _touchDragEmoji='';
-                            _touchDragArmed=false;
-                            _touchDragMoved=false;
-                            if(_touchLongPressTimer)clearTimeout(_touchLongPressTimer);
-                            _touchLongPressTimer=window.setTimeout(()=>{
-                              // Long-press held: arm the drag and show the ghost.
-                              _touchDragArmed=true;
-                              _touchDragEmoji=item.emoji;
-                              const ghost=document.createElement('div');
-                              ghost.id='tf-touch-ghost';
-                              ghost.textContent=item.emoji;
-                              ghost.style.cssText='position:fixed;z-index:99999;pointer-events:none;font-size:38px;transform:translate(-50%,-50%);filter:drop-shadow(0 4px 8px rgba(0,0,0,0.5));transition:none;';
-                              ghost.style.left=_touchStartX+'px';
-                              ghost.style.top=_touchStartY+'px';
-                              document.body.appendChild(ghost);
-                              try{navigator.vibrate&&navigator.vibrate(15);}catch{}
-                            },350);
+                            _touchDragEmoji='';_touchDragArmed=false;_touchDragMoved=false;_touchDecided=false;
                           }}
                           onTouchMove={e=>{
                             if(!isMobile)return;
                             const t=e.touches[0];
-                            const dx=Math.abs(t.clientX-_touchStartX);
-                            const dy=Math.abs(t.clientY-_touchStartY);
-                            // If not yet armed and the finger moved (scrolling), cancel the
-                            // long-press timer and let the browser scroll normally.
-                            if(!_touchDragArmed){
-                              if(dx>8||dy>8){
-                                if(_touchLongPressTimer){clearTimeout(_touchLongPressTimer);_touchLongPressTimer=0;}
+                            const dx=t.clientX-_touchStartX;
+                            const dy=t.clientY-_touchStartY;
+                            const adx=Math.abs(dx),ady=Math.abs(dy);
+                            // First meaningful movement decides intent ONCE.
+                            if(!_touchDecided){
+                              if(adx<6&&ady<6)return;            // too small, wait
+                              _touchDecided=true;
+                              // Horizontal-leaning movement = grab to drag.
+                              // Vertical-leaning = let the list scroll (do nothing).
+                              if(adx>ady){
+                                _touchDragArmed=true;
+                                _touchDragEmoji=item.emoji;
+                                const ghost=document.createElement('div');
+                                ghost.id='tf-touch-ghost';
+                                ghost.textContent=item.emoji;
+                                ghost.style.cssText='position:fixed;z-index:99999;pointer-events:none;font-size:40px;transform:translate(-50%,-50%);filter:drop-shadow(0 6px 10px rgba(0,0,0,0.55));transition:none;will-change:left,top;';
+                                ghost.style.left=t.clientX+'px';ghost.style.top=t.clientY+'px';
+                                document.body.appendChild(ghost);
+                                try{navigator.vibrate&&navigator.vibrate(12);}catch{}
+                              }else{
+                                _touchDragArmed=false; // scrolling — leave it alone
                               }
-                              return;
                             }
-                            // Drag is armed — take over, prevent scroll, move ghost.
-                            e.preventDefault();
+                            if(!_touchDragArmed)return;          // scrolling, let browser handle
+                            e.preventDefault();                  // we own this gesture now
                             _touchDragMoved=true;
                             const ghost=document.getElementById('tf-touch-ghost');
                             if(ghost){ghost.style.left=t.clientX+'px';ghost.style.top=t.clientY+'px';}
                             document.querySelectorAll('[data-grid-cell]').forEach(c=>((c as HTMLElement).style.outline=''));
                             const under=document.elementFromPoint(t.clientX,t.clientY) as HTMLElement|null;
                             const cell=under?.closest('[data-grid-cell]') as HTMLElement|null;
-                            if(cell)cell.style.outline='2px solid rgba(0,255,170,0.7)';
+                            if(cell)cell.style.outline='2px solid rgba(0,255,170,0.75)';
                           }}
                           onTouchEnd={e=>{
                             if(!isMobile)return;
-                            if(_touchLongPressTimer){clearTimeout(_touchLongPressTimer);_touchLongPressTimer=0;}
                             const ghost=document.getElementById('tf-touch-ghost');
                             if(ghost)ghost.remove();
                             document.querySelectorAll('[data-grid-cell]').forEach(c=>((c as HTMLElement).style.outline=''));
+                            // Always reset this icon's visual state (touch never fires mouseleave).
+                            const self=e.currentTarget as HTMLElement;
+                            self.style.transform='scale(1)';self.style.boxShadow='';
+                            self.style.background='rgba(0,255,170,0.04)';self.style.borderColor='rgba(0,255,170,0.10)';
                             const wasArmed=_touchDragArmed;
                             const em=_touchDragEmoji;
-                            _touchDragArmed=false;_touchDragEmoji='';
-                            // Never armed = a tap (or a scroll). A pure tap opens stats.
+                            _touchDragArmed=false;_touchDragEmoji='';_touchDecided=false;
                             if(!wasArmed){
+                              // No drag started = a tap or a scroll. Pure tap opens stats.
                               const t0=e.changedTouches[0];
-                              const moved=Math.abs(t0.clientX-_touchStartX)>8||Math.abs(t0.clientY-_touchStartY)>8;
+                              const moved=Math.abs(t0.clientX-_touchStartX)>6||Math.abs(t0.clientY-_touchStartY)>6;
                               if(!moved)setModal({emoji:item.emoji,bpId:activeBp?.id??'',tileId:-1});
                               return;
                             }
-                            // Armed drag — drop onto the cell under the finger.
                             const t=e.changedTouches[0];
                             const under=document.elementFromPoint(t.clientX,t.clientY) as HTMLElement|null;
                             const cell=under?.closest('[data-grid-cell]') as HTMLElement|null;
@@ -9268,7 +9266,7 @@ export default function TerraForgeHome(){
                               if(!Number.isNaN(slot))_touchDropHandler(slot,em);
                             }
                           }}
-                          onClick={()=>{if(!isMobile)setModal({emoji:item.emoji,bpId:activeBp?.id??'',tileId:-1});}}
+                                                    onClick={()=>{if(!isMobile)setModal({emoji:item.emoji,bpId:activeBp?.id??'',tileId:-1});}}
                           style={{
                             width:'100%',minHeight:isMobile?46:64,display:'flex',flexDirection:'column',
                             alignItems:'center',gap:isMobile?1:4,padding:isMobile?'4px 2px':'8px 4px 7px',borderRadius:10,
@@ -9280,12 +9278,12 @@ export default function TerraForgeHome(){
                             border:'1px solid rgba(0,255,170,0.10)',
                             transition:'transform 0.14s cubic-bezier(0.22,1,0.36,1),opacity 0.14s cubic-bezier(0.22,1,0.36,1),border-color 0.14s cubic-bezier(0.22,1,0.36,1),box-shadow 0.14s cubic-bezier(0.22,1,0.36,1)',
                           }}
-                          onMouseEnter={e=>{const el=e.currentTarget as HTMLElement;
+                          onMouseEnter={isMobile?undefined:(e=>{const el=e.currentTarget as HTMLElement;
                             el.style.background=C+'12';el.style.borderColor=C+'38';
-                            el.style.transform='scale(1.06)';el.style.boxShadow='0 0 12px '+C+'20';}}
-                          onMouseLeave={e=>{const el=e.currentTarget as HTMLElement;
+                            el.style.transform='scale(1.06)';el.style.boxShadow='0 0 12px '+C+'20';})}
+                          onMouseLeave={isMobile?undefined:(e=>{const el=e.currentTarget as HTMLElement;
                             el.style.background='rgba(0,255,170,0.04)';el.style.borderColor='rgba(0,255,170,0.10)';
-                            el.style.transform='scale(1)';el.style.boxShadow='';}}
+                            el.style.transform='scale(1)';el.style.boxShadow='';})}
                           title={item.name+' — click for stats · drag to map'}>
                           <FeatureIcon emoji={item.emoji} size={isMobile?18:22}/>
                           <span style={{
