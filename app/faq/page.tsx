@@ -14,7 +14,7 @@ const FAQS = [
       { q: 'What is TerraForge?', a: 'TerraForge is an AI-powered homestead and permaculture planning tool. You enter your property details — size, location, climate zone, and goals — and TerraForge generates a complete homestead blueprint with a tile-by-tile layout, seasonal planting calendar, ROI projections, and a satellite property canvas.' },
       { q: 'Do I need any experience to use TerraForge?', a: 'No experience needed. TerraForge is built for complete beginners and experienced homesteaders alike. The AI handles the design logic — you just describe your property and goals.' },
       { q: 'Is TerraForge free?', a: 'Yes, the core app is free. You can generate blueprints, explore the seasonal calendar, and use the ROI tracker at no cost. Pro features — unlimited blueprints, multiple properties, satellite canvas, shopping list export, and AI property analysis — are available for $9/month or $79/year.' },
-      { q: 'Does TerraForge work on mobile?', a: 'Yes. TerraForge is fully responsive and works on any device — desktop, tablet, and mobile. Native iOS and Android apps are also available.' },
+      { q: 'Does TerraForge work on mobile?', a: 'Yes. TerraForge is fully responsive and works on any device — desktop, tablet, and mobile — right in your web browser.' },
     ],
   },
   {
