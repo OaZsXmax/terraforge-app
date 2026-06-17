@@ -697,42 +697,6 @@ html,body{max-width:100vw;overflow-x:hidden;}
 @media(max-width:768px){
   .tf-main{padding:12px 10px 100px;}
 }
-
-/* ============================================================
-   MOBILE PERFORMANCE OVERRIDE  (<=820px)
-   WebView cannot composite heavy backdrop-blur every scroll
-   frame -> flicker + jank. Neutralise blur + perpetual
-   animations on small screens only. Desktop unaffected.
-   ============================================================ */
-@media(max-width:820px){
-  *{
-    backdrop-filter:none !important;
-    -webkit-backdrop-filter:none !important;
-  }
-  *{
-    animation-duration:0s !important;
-    animation-delay:0s !important;
-    animation-iteration-count:1 !important;
-  }
-  .a-fadeUp{animation:none !important;opacity:1 !important;transform:none !important;}
-  html,body{
-    -webkit-overflow-scrolling:touch;
-    overscroll-behavior-y:none;
-    touch-action:pan-y;
-  }
-  html,body,#__next{max-width:100vw;overflow-x:hidden;}
-
-  /* Collapse dense fixed grids to 2 columns on phones. React emits
-     inline styles as kebab-case in the DOM, so match that form.
-     !important lets the stylesheet win over the inline value. */
-  [style*="grid-template-columns: repeat(4, 1fr)"],
-  [style*="grid-template-columns:repeat(4,1fr)"]{grid-template-columns:repeat(2,1fr) !important;}
-  [style*="grid-template-columns: repeat(3, 1fr)"],
-  [style*="grid-template-columns:repeat(3,1fr)"]{grid-template-columns:repeat(2,1fr) !important;}
-
-  /* Tables scroll inside their own box instead of stretching the page */
-  table{display:block;overflow-x:auto;-webkit-overflow-scrolling:touch;max-width:100%;}
-}
 `;
 
 
@@ -865,6 +829,11 @@ const ICON_LOOKUP = new Map(iconLibrary.map(i=>[i.emoji,i]));
 // Written in onDragStart, read in onDrop — never stale, no closure.
 let _draggedEmoji='';
 let _isDraggingFromLibrary=false; // true while user drags from feature library
+// Touch-drag fallback: MapGrid registers its drop handler here so the library
+// icons' touchend can place a tile (HTML5 drag is unreliable in mobile WebView).
+let _touchDropHandler:((slotId:number,emoji:string)=>void)|null=null;
+let _touchDragEmoji='';      // emoji currently being touch-dragged from library
+let _touchDragMoved=false;   // distinguishes a drag from a tap
 
 const CONFLICTS: Record<string,string[]> = {
   '🐔':['🌱','🌼','🐝'], '🐝':['🌬️','🦆'], '🌊':['🥔','🥕','🌱'],
@@ -3018,6 +2987,8 @@ function CompanionBanner({pairs}:{pairs:{icons:[string,string];benefit:string}[]
 interface MapGridProps{bp:Blueprint;isDragging:boolean;onMouseDown:(e:React.MouseEvent)=>void;onTouchStart?:(e:React.TouchEvent)=>void;onDrop:(id:number,emoji:string)=>void;onTileMove:(fromId:number,toId:number)=>void;onRemove:(id:number)=>void;onTileClick:(id:number,icon:string)=>void;onReset:()=>void;gridPixelSize?:number}
 function MapGrid({bp,isDragging,onMouseDown,onTouchStart,onDrop,onTileMove,onRemove,onTileClick,onReset,gridPixelSize=220}:MapGridProps){
   const gridRef=useRef<HTMLDivElement>(null);
+  // Expose this grid's drop handler globally for the mobile touch-drag fallback.
+  useEffect(()=>{_touchDropHandler=(slotId:number,emoji:string)=>onDrop(slotId,emoji);return()=>{_touchDropHandler=null;};},[onDrop]);
   const allIcons=useMemo(()=>bp.tiles.map((t:{id:number;icon:string})=>t.icon),[bp.tiles]);
   const allIconSet=useMemo(()=>new Set(allIcons),[allIcons]);
   const conflicts=useMemo(()=>{
@@ -3075,13 +3046,14 @@ function MapGrid({bp,isDragging,onMouseDown,onTouchStart,onDrop,onTileMove,onRem
         <div style={{userSelect:"none",cursor:isDragging?"grabbing":"grab",width:gridPixelSize,maxWidth:'100%',margin:"0 auto"}}
         onMouseDown={onMouseDown}
         onTouchStart={onTouchStart}>
-          <div data-bp-id={bp.id} style={{display:'grid',gridTemplateColumns:`repeat(${bp.gridCols},1fr)`,gap:gridPixelSize<340?3:5,transform:`rotateX(${bp.rotation.x}deg) rotateY(${bp.rotation.y}deg)`,transition:isDragging?'none':'transform 0.15s cubic-bezier(0.22,1,0.36,1)'}}>
+          <div data-bp-id={bp.id} style={{display:'grid',gridTemplateColumns:`repeat(${bp.gridCols},1fr)`,gap:gridPixelSize<340?3:5,transform:(typeof window!=='undefined'&&window.innerWidth<=768)?'none':`rotateX(${bp.rotation.x}deg) rotateY(${bp.rotation.y}deg)`,transition:isDragging?'none':'transform 0.15s cubic-bezier(0.22,1,0.36,1)'}}>
             {(()=>{
               const tileById=new Map(bp.tiles.map((t:{id:number;icon:string})=>[t.id,t]));
               return Array(bp.gridCount).fill(0).map((_,i)=>{
               const placed=tileById.get(i);
               return(
                 <div key={`${i}-${placed?.icon??'e'}`}
+                  data-grid-cell="1" data-slot={i}
                   onDragOver={e=>{e.preventDefault();e.currentTarget.style.outline='2px solid rgba(0,255,170,0.6)';}}
                   onDragLeave={e=>{e.currentTarget.style.outline='';}}
                   onDrop={e=>{
@@ -9219,11 +9191,58 @@ export default function TerraForgeHome(){
                             _isDraggingFromLibrary=false;
                             document.querySelectorAll('.grid-lib-drag').forEach(el=>el.classList.remove('grid-lib-drag'));
                           }}
-                          onClick={()=>setModal({emoji:item.emoji,bpId:activeBp?.id??'',tileId:-1})}
+                          onTouchStart={e=>{
+                            // Mobile touch-drag fallback — HTML5 drag is unreliable in WebView.
+                            if(!isMobile)return;
+                            const t=e.touches[0];
+                            _touchDragEmoji=item.emoji;
+                            _touchDragMoved=false;
+                            // floating ghost that follows the finger
+                            const ghost=document.createElement('div');
+                            ghost.id='tf-touch-ghost';
+                            ghost.textContent=item.emoji;
+                            ghost.style.cssText='position:fixed;z-index:99999;pointer-events:none;font-size:34px;transform:translate(-50%,-50%);filter:drop-shadow(0 4px 8px rgba(0,0,0,0.5));transition:none;';
+                            ghost.style.left=t.clientX+'px';
+                            ghost.style.top=t.clientY+'px';
+                            document.body.appendChild(ghost);
+                          }}
+                          onTouchMove={e=>{
+                            if(!isMobile||!_touchDragEmoji)return;
+                            _touchDragMoved=true;
+                            const t=e.touches[0];
+                            const ghost=document.getElementById('tf-touch-ghost');
+                            if(ghost){ghost.style.left=t.clientX+'px';ghost.style.top=t.clientY+'px';}
+                            // highlight cell under finger
+                            document.querySelectorAll('[data-grid-cell]').forEach(c=>((c as HTMLElement).style.outline=''));
+                            const under=document.elementFromPoint(t.clientX,t.clientY) as HTMLElement|null;
+                            const cell=under?.closest('[data-grid-cell]') as HTMLElement|null;
+                            if(cell)cell.style.outline='2px solid rgba(0,255,170,0.7)';
+                          }}
+                          onTouchEnd={e=>{
+                            if(!isMobile){return;}
+                            const ghost=document.getElementById('tf-touch-ghost');
+                            if(ghost)ghost.remove();
+                            document.querySelectorAll('[data-grid-cell]').forEach(c=>((c as HTMLElement).style.outline=''));
+                            const em=_touchDragEmoji;
+                            _touchDragEmoji='';
+                            // A tap (no movement) opens the stats modal, matching desktop click.
+                            if(!_touchDragMoved){setModal({emoji:item.emoji,bpId:activeBp?.id??'',tileId:-1});return;}
+                            const t=e.changedTouches[0];
+                            const under=document.elementFromPoint(t.clientX,t.clientY) as HTMLElement|null;
+                            const cell=under?.closest('[data-grid-cell]') as HTMLElement|null;
+                            if(cell&&em&&_touchDropHandler){
+                              const slot=Number(cell.getAttribute('data-slot'));
+                              if(!Number.isNaN(slot))_touchDropHandler(slot,em);
+                            }
+                          }}
+                          onClick={()=>{if(!isMobile)setModal({emoji:item.emoji,bpId:activeBp?.id??'',tileId:-1});}}
                           style={{
                             width:'100%',minHeight:isMobile?46:64,display:'flex',flexDirection:'column',
                             alignItems:'center',gap:isMobile?1:4,padding:isMobile?'4px 2px':'8px 4px 7px',borderRadius:10,
                             cursor:'pointer',
+                            // touch-action:none lets HTML5 drag start instantly on mobile
+                            // instead of waiting out the pan-y long-press delay
+                            touchAction:'none',
                             background:'rgba(0,255,170,0.04)',
                             border:'1px solid rgba(0,255,170,0.10)',
                             transition:'transform 0.14s cubic-bezier(0.22,1,0.36,1),opacity 0.14s cubic-bezier(0.22,1,0.36,1),border-color 0.14s cubic-bezier(0.22,1,0.36,1),box-shadow 0.14s cubic-bezier(0.22,1,0.36,1)',
@@ -9364,13 +9383,13 @@ export default function TerraForgeHome(){
                         ?(activeBp.type==='property'?Math.min(280,window.innerWidth-56):activeBp.type==='raised-bed'?Math.min(300,window.innerWidth-56):Math.min(240,window.innerWidth-56))
                         :(activeBp.type==='property'?760:activeBp.type==='raised-bed'?680:600)}
                       isDragging={draggingId===activeBp.id}
-                      onMouseDown={e=>{if(e.button===0){setDraggingId(activeBp.id);lastMouse.current={x:e.clientX,y:e.clientY};}}}
-                      onTouchStart={e=>{
+                      onMouseDown={isMobile?(()=>{}):(e=>{if(e.button===0){setDraggingId(activeBp.id);lastMouse.current={x:e.clientX,y:e.clientY};}})}
+                      onTouchStart={isMobile?undefined:(e=>{
                         if(e.touches.length!==1)return;
                         const t=e.touches[0];
                         setDraggingId(activeBp.id);
                         lastMouse.current={x:t.clientX,y:t.clientY};
-                      }}
+                      })}
                       onDrop={(id,em)=>{
                         document.querySelectorAll('.grid-lib-drag').forEach(el=>el.classList.remove('grid-lib-drag'));
                         const bpId=activeBpIdRef.current;
