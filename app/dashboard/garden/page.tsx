@@ -710,6 +710,9 @@ html,body{max-width:100vw;overflow-x:hidden;}
   [style*="grid-template-columns: repeat(4, 1fr)"],[style*="grid-template-columns:repeat(4,1fr)"]{grid-template-columns:repeat(2,1fr) !important;}
   [style*="grid-template-columns: repeat(3, 1fr)"],[style*="grid-template-columns:repeat(3,1fr)"]{grid-template-columns:repeat(2,1fr) !important;}
   table{display:block;overflow-x:auto;-webkit-overflow-scrolling:touch;max-width:100%;}
+  /* Canvas tile strip must scroll horizontally despite the global pan-y */
+  .tf-canvas-strip{touch-action:pan-x !important;overflow-x:auto !important;-webkit-overflow-scrolling:touch;}
+  .tf-canvas-strip>*{flex:0 0 auto !important;}
 }
 `;
 
@@ -2339,7 +2342,31 @@ function PropertyCanvas({isPro,onPaywall,address}:{isPro:boolean;onPaywall:()=>v
   const [hoveredCell,setHoveredCell]=useState<number|null>(null);
   const dragTile=useRef<{emoji:string;name:string}|null>(null);
 
-  // Persist tiles — survives close, refresh, everything
+  // Named canvas saves — lets users keep multiple property layouts and
+  // come back to finish later. Stored separately from blueprints because a
+  // canvas is tied to the physical property, not a design iteration.
+  type CanvasSave={id:string;name:string;cells:CanvasState;savedAt:string};
+  const [savedLayouts,setSavedLayouts]=useState<CanvasSave[]>(()=>{
+    try{const s=localStorage.getItem('tf-canvas-saves');return s?JSON.parse(s):[];}catch{return [];}
+  });
+  const [showSaveDialog,setShowSaveDialog]=useState(false);
+  const [showLoadDialog,setShowLoadDialog]=useState(false);
+  const [saveName,setSaveName]=useState('');
+
+  function persistSaves(list:CanvasSave[]){
+    setSavedLayouts(list);
+    try{localStorage.setItem('tf-canvas-saves',JSON.stringify(list));}catch{}
+  }
+  function saveCurrentLayout(){
+    const name=saveName.trim()||`Layout ${savedLayouts.length+1}`;
+    const entry:CanvasSave={id:'cs_'+Date.now(),name,cells:{...cells},savedAt:new Date().toISOString()};
+    persistSaves([entry,...savedLayouts].slice(0,20));
+    setSaveName('');setShowSaveDialog(false);
+  }
+  function loadLayout(s:CanvasSave){setCells({...s.cells});setShowLoadDialog(false);}
+  function deleteLayout(id:string){persistSaves(savedLayouts.filter(s=>s.id!==id));}
+
+  // Persist tiles — survives close, refresh, everything (working draft)
   useEffect(()=>{try{localStorage.setItem('tf-canvas-v1',JSON.stringify(cells));}catch{}},[cells]);
 
   // Init map once on mount
@@ -2464,6 +2491,17 @@ function PropertyCanvas({isPro,onPaywall,address}:{isPro:boolean;onPaywall:()=>v
           color:placingMode?'#00ffaa':'rgba(200,230,212,0.5)'}}>
           {placingMode?'✏️ Placing':'🖐 Navigate'}
         </button>
+        <button onClick={()=>setShowSaveDialog(true)} style={{padding:'6px 12px',borderRadius:8,
+          cursor:'pointer',flexShrink:0,fontSize:12,fontWeight:700,
+          background:'rgba(0,255,170,0.1)',border:'1px solid rgba(0,255,170,0.28)',color:'#00ffaa'}}>
+          💾 Save
+        </button>
+        <button onClick={()=>setShowLoadDialog(true)} style={{padding:'6px 12px',borderRadius:8,
+          cursor:'pointer',flexShrink:0,fontSize:12,fontWeight:700,
+          background:'rgba(255,255,255,0.05)',border:'1px solid rgba(255,255,255,0.12)',
+          color:'rgba(200,230,212,0.6)'}}>
+          📂 Load{savedLayouts.length>0?` (${savedLayouts.length})`:''}
+        </button>
         <button onClick={()=>{if(confirm('Clear all canvas tiles?'))setCells({});}} style={{
           padding:'6px 10px',borderRadius:8,cursor:'pointer',flexShrink:0,
           background:'rgba(255,80,80,0.08)',border:'1px solid rgba(255,80,80,0.2)',
@@ -2489,7 +2527,8 @@ function PropertyCanvas({isPro,onPaywall,address}:{isPro:boolean;onPaywall:()=>v
         <div style={{width:isMobileCanvas?'100%':176,flexShrink:0,display:'flex',flexDirection:'column',
           borderRight:isMobileCanvas?'none':'1px solid rgba(0,255,170,0.1)',
           borderBottom:isMobileCanvas?'1px solid rgba(0,255,170,0.1)':'none',
-          maxHeight:isMobileCanvas?220:'none',overflowY:'auto'}}>
+          maxHeight:isMobileCanvas?'none':'none',
+          overflowY:isMobileCanvas?'visible':'auto'}}>
           <div style={{padding:'8px 10px',borderBottom:'1px solid rgba(0,255,170,0.08)',flexShrink:0,minHeight:48}}>
             {selected?(
               <div style={{display:'flex',alignItems:'center',gap:6,padding:'5px 8px',
@@ -2515,10 +2554,12 @@ function PropertyCanvas({isPro,onPaywall,address}:{isPro:boolean;onPaywall:()=>v
               </button>
             ))}
           </div>
-          <div style={{flex:1,overflowY:isMobileCanvas?'hidden':'auto',overflowX:isMobileCanvas?'auto':'hidden',
+          <div className={isMobileCanvas?'tf-canvas-strip':''} style={{
+            flex:isMobileCanvas?'none':1,width:isMobileCanvas?'100%':'auto',
+            overflowY:isMobileCanvas?'hidden':'auto',overflowX:isMobileCanvas?'auto':'hidden',
             display:isMobileCanvas?'flex':'block',flexDirection:isMobileCanvas?'row':'column',
-            gap:isMobileCanvas?6:0,padding:'2px 6px 12px',WebkitOverflowScrolling:'touch',
-            touchAction:isMobileCanvas?'pan-x':'pan-y'}}>
+            flexWrap:'nowrap',gap:isMobileCanvas?6:0,padding:'2px 6px 12px',
+            WebkitOverflowScrolling:'touch',touchAction:isMobileCanvas?'pan-x':'pan-y'}}>
             {CANVAS_TILES.filter(t=>t.cat===activeCat).map(tile=>{
               const isSel=selected?.emoji===tile.emoji&&selected?.name===tile.name;
               return(
@@ -2545,7 +2586,14 @@ function PropertyCanvas({isPro,onPaywall,address}:{isPro:boolean;onPaywall:()=>v
         {/* Map + grid */}
         <div style={{flex:1,position:'relative',height:isMobileCanvas?420:'auto',minHeight:isMobileCanvas?420:0}}>
           <div ref={mapRef} style={{position:'absolute',inset:0,zIndex:0}}/>
-          <div style={{position:'absolute',inset:0,zIndex:1,
+          {/* Grid overlay: a centered SQUARE so every cell is square on all screens */}
+          <div style={{position:'absolute',inset:0,zIndex:1,display:'flex',
+            alignItems:'center',justifyContent:'center',
+            pointerEvents:placingMode?'all':'none'}}>
+          <div style={{
+            aspectRatio:'1',
+            height:'min(100%,100vw)',maxHeight:'100%',
+            width:'auto',maxWidth:'100%',
             display:'grid',
             gridTemplateColumns:`repeat(${CANVAS_GRID},1fr)`,
             gridTemplateRows:`repeat(${CANVAS_GRID},1fr)`,
@@ -2581,6 +2629,7 @@ function PropertyCanvas({isPro,onPaywall,address}:{isPro:boolean;onPaywall:()=>v
               </div>
             ))}
           </div>
+          </div>
           {!mapLoaded&&(
             <div style={{position:'absolute',inset:0,display:'flex',alignItems:'center',
               justifyContent:'center',background:'rgba(4,14,8,0.92)',zIndex:5}}>
@@ -2602,6 +2651,80 @@ function PropertyCanvas({isPro,onPaywall,address}:{isPro:boolean;onPaywall:()=>v
           )}
         </div>
       </div>
+
+      {/* Save dialog */}
+      {showSaveDialog&&(
+        <div onClick={()=>setShowSaveDialog(false)} style={{position:'fixed',inset:0,zIndex:9000,
+          background:'rgba(4,14,8,0.8)',backdropFilter:'blur(6px)',display:'flex',
+          alignItems:'center',justifyContent:'center',padding:20}}>
+          <div onClick={e=>e.stopPropagation()} style={{width:'100%',maxWidth:360,
+            background:'linear-gradient(160deg,rgba(14,42,26,0.98),rgba(8,20,16,0.98))',
+            border:'1px solid rgba(0,255,170,0.25)',borderRadius:18,padding:'24px 22px'}}>
+            <div style={{fontFamily:"'Space Grotesk',sans-serif",fontWeight:700,fontSize:16,
+              color:'#f2fffa',marginBottom:6}}>Save this layout</div>
+            <div style={{fontSize:12,color:'rgba(170,240,210,0.6)',marginBottom:16}}>
+              Give it a name so you can come back and finish later.</div>
+            <input autoFocus value={saveName} onChange={e=>setSaveName(e.target.value)}
+              onKeyDown={e=>{if(e.key==='Enter')saveCurrentLayout();}}
+              placeholder="e.g. Back paddock, Orchard plan…"
+              style={{width:'100%',padding:'11px 14px',borderRadius:10,fontSize:14,
+                background:'rgba(0,255,170,0.04)',border:'1px solid rgba(0,255,170,0.2)',
+                color:'#d2fcea',outline:'none',boxSizing:'border-box',marginBottom:16}}/>
+            <div style={{display:'flex',gap:10}}>
+              <button onClick={saveCurrentLayout} style={{flex:1,padding:'11px',borderRadius:10,
+                cursor:'pointer',border:'none',background:'linear-gradient(135deg,#00ffaa,#00c45a)',
+                color:'#051a0e',fontWeight:800,fontSize:14}}>Save Layout</button>
+              <button onClick={()=>{setShowSaveDialog(false);setSaveName('');}} style={{padding:'11px 18px',
+                borderRadius:10,cursor:'pointer',background:'rgba(255,255,255,0.05)',
+                border:'1px solid rgba(255,255,255,0.12)',color:'rgba(200,230,212,0.6)',
+                fontWeight:700,fontSize:13}}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Load dialog */}
+      {showLoadDialog&&(
+        <div onClick={()=>setShowLoadDialog(false)} style={{position:'fixed',inset:0,zIndex:9000,
+          background:'rgba(4,14,8,0.8)',backdropFilter:'blur(6px)',display:'flex',
+          alignItems:'center',justifyContent:'center',padding:20}}>
+          <div onClick={e=>e.stopPropagation()} style={{width:'100%',maxWidth:400,maxHeight:'70vh',
+            display:'flex',flexDirection:'column',
+            background:'linear-gradient(160deg,rgba(14,42,26,0.98),rgba(8,20,16,0.98))',
+            border:'1px solid rgba(0,255,170,0.25)',borderRadius:18,padding:'24px 22px'}}>
+            <div style={{fontFamily:"'Space Grotesk',sans-serif",fontWeight:700,fontSize:16,
+              color:'#f2fffa',marginBottom:16}}>Saved layouts</div>
+            {savedLayouts.length===0?(
+              <div style={{fontSize:13,color:'rgba(170,240,210,0.5)',textAlign:'center',padding:'30px 0'}}>
+                No saved layouts yet. Build something, then tap 💾 Save.</div>
+            ):(
+              <div style={{overflowY:'auto',display:'flex',flexDirection:'column',gap:8}}>
+                {savedLayouts.map(s=>(
+                  <div key={s.id} style={{display:'flex',alignItems:'center',gap:10,padding:'12px 14px',
+                    borderRadius:12,background:'rgba(0,255,170,0.04)',border:'1px solid rgba(0,255,170,0.12)'}}>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:13,fontWeight:700,color:'#f2fffa',overflow:'hidden',
+                        textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.name}</div>
+                      <div style={{fontSize:11,color:'rgba(170,240,210,0.45)'}}>
+                        {Object.keys(s.cells).length} tiles · {new Date(s.savedAt).toLocaleDateString()}</div>
+                    </div>
+                    <button onClick={()=>loadLayout(s)} style={{padding:'6px 14px',borderRadius:8,
+                      cursor:'pointer',background:'rgba(0,255,170,0.12)',border:'1px solid rgba(0,255,170,0.3)',
+                      color:'#00ffaa',fontWeight:700,fontSize:12,flexShrink:0}}>Load</button>
+                    <button onClick={()=>deleteLayout(s.id)} style={{padding:'6px 10px',borderRadius:8,
+                      cursor:'pointer',background:'rgba(255,80,80,0.08)',border:'1px solid rgba(255,80,80,0.2)',
+                      color:'#ff8080',fontWeight:700,fontSize:12,flexShrink:0}}>✕</button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <button onClick={()=>setShowLoadDialog(false)} style={{marginTop:16,padding:'10px',
+              borderRadius:10,cursor:'pointer',background:'rgba(255,255,255,0.05)',
+              border:'1px solid rgba(255,255,255,0.12)',color:'rgba(200,230,212,0.6)',
+              fontWeight:700,fontSize:13}}>Close</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
