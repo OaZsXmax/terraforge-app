@@ -710,12 +710,13 @@ html,body{max-width:100vw;overflow-x:hidden;}
   [style*="grid-template-columns: repeat(4, 1fr)"],[style*="grid-template-columns:repeat(4,1fr)"]{grid-template-columns:repeat(2,1fr) !important;}
   [style*="grid-template-columns: repeat(3, 1fr)"],[style*="grid-template-columns:repeat(3,1fr)"]{grid-template-columns:repeat(2,1fr) !important;}
   table{display:block;overflow-x:auto;-webkit-overflow-scrolling:touch;max-width:100%;}
-  /* Canvas tile strip must scroll horizontally despite the global pan-y.
-     min-width:0 + max-width:100% defeats the flexbox min-content default that
-     was making the strip grow to fit all icons instead of overflowing. */
+  /* Canvas tile strip: block-level horizontal scroller (no flexbox).
+     white-space:nowrap on the container + inline-block children = content
+     overflows horizontally and scrolls. Forced here with !important so the
+     global pan-y / overflow rules can't suppress it. */
   .tf-canvas-strip{touch-action:pan-x !important;overflow-x:auto !important;overflow-y:hidden !important;
-    -webkit-overflow-scrolling:touch;min-width:0 !important;max-width:100% !important;}
-  .tf-canvas-strip>*{flex:0 0 auto !important;}
+    -webkit-overflow-scrolling:touch !important;white-space:nowrap !important;
+    max-width:100% !important;width:100% !important;display:block !important;}
 }
 `;
 
@@ -2467,7 +2468,7 @@ function PropertyCanvas({isPro,onPaywall,address}:{isPro:boolean;onPaywall:()=>v
   );
 
   return(
-    <div style={{borderRadius:20,overflow:'hidden',border:'1px solid rgba(0,255,170,0.18)',
+    <div style={{borderRadius:20,overflow:isMobileCanvas?'visible':'hidden',border:'1px solid rgba(0,255,170,0.18)',
       background:'rgba(8,22,14,0.97)'}}>
 
       {/* Toolbar */}
@@ -2524,14 +2525,16 @@ function PropertyCanvas({isPro,onPaywall,address}:{isPro:boolean;onPaywall:()=>v
       )}
 
       {/* Body */}
-      <div style={{display:'flex',flexDirection:isMobileCanvas?'column':'row',height:isMobileCanvas?'auto':520}}>
+      <div style={{display:'flex',flexDirection:isMobileCanvas?'column':'row',height:isMobileCanvas?'auto':520,minWidth:0,maxWidth:'100%',width:'100%',boxSizing:'border-box'}}>
 
         {/* Tile palette */}
-        <div style={{width:isMobileCanvas?'100%':176,flexShrink:0,display:'flex',flexDirection:'column',
-          minWidth:0,maxWidth:'100%',
+        <div style={{width:isMobileCanvas?'100%':176,flexShrink:0,
+          display:isMobileCanvas?'block':'flex',flexDirection:'column',
+          minWidth:0,maxWidth:'100%',boxSizing:'border-box',
           borderRight:isMobileCanvas?'none':'1px solid rgba(0,255,170,0.1)',
           borderBottom:isMobileCanvas?'1px solid rgba(0,255,170,0.1)':'none',
-          overflowY:isMobileCanvas?'visible':'auto'}}>
+          overflow:isMobileCanvas?'hidden':'visible',
+          overflowY:isMobileCanvas?undefined:'auto'}}>
           <div style={{padding:'8px 10px',borderBottom:'1px solid rgba(0,255,170,0.08)',flexShrink:0,minHeight:48}}>
             {selected?(
               <div style={{display:'flex',alignItems:'center',gap:6,padding:'5px 8px',
@@ -2557,30 +2560,36 @@ function PropertyCanvas({isPro,onPaywall,address}:{isPro:boolean;onPaywall:()=>v
               </button>
             ))}
           </div>
-          <div className={isMobileCanvas?'tf-canvas-strip':''} style={{
-            flex:isMobileCanvas?'none':1,
-            width:isMobileCanvas?'100%':'auto',minWidth:0,maxWidth:'100%',
-            overflowY:isMobileCanvas?'hidden':'auto',overflowX:isMobileCanvas?'auto':'hidden',
-            display:isMobileCanvas?'flex':'block',flexDirection:isMobileCanvas?'row':'column',
-            flexWrap:'nowrap',gap:isMobileCanvas?6:0,padding:'2px 6px 12px',
-            WebkitOverflowScrolling:'touch',touchAction:isMobileCanvas?'pan-x':'pan-y'}}>
+          <div className={isMobileCanvas?'tf-canvas-strip':''} style={isMobileCanvas?{
+            // MOBILE: plain block scroller — whitespace:nowrap + inline-block children.
+            // This does NOT use flexbox, sidestepping the min-width:auto trap entirely.
+            display:'block',whiteSpace:'nowrap',overflowX:'auto',overflowY:'hidden',
+            width:'100%',padding:'4px 6px 12px',WebkitOverflowScrolling:'touch',touchAction:'pan-x'
+          }:{
+            flex:1,overflowY:'auto',overflowX:'hidden',display:'block',padding:'2px 6px 12px',touchAction:'pan-y'
+          }}>
             {CANVAS_TILES.filter(t=>t.cat===activeCat).map(tile=>{
               const isSel=selected?.emoji===tile.emoji&&selected?.name===tile.name;
               return(
                 <div key={tile.name} draggable={!isMobileCanvas}
                   onDragStart={()=>{dragTile.current={emoji:tile.emoji,name:tile.name};}}
                   onClick={()=>{setSelected(isSel?null:tile);if(!isSel)setPlacingMode(true);}}
-                  style={{display:'flex',alignItems:'center',gap:7,
-                    padding:isMobileCanvas?'8px 12px':'5px 7px',
-                    borderRadius:isMobileCanvas?10:7,
-                    cursor:isMobileCanvas?'pointer':'grab',marginBottom:isMobileCanvas?0:1,
-                    flexShrink:0,flexDirection:isMobileCanvas?'column':'row',
-                    minWidth:isMobileCanvas?64:'auto',
+                  style={isMobileCanvas?{
+                    display:'inline-flex',flexDirection:'column',alignItems:'center',gap:3,
+                    verticalAlign:'top',whiteSpace:'normal',
+                    width:72,marginRight:6,padding:'8px 6px',borderRadius:10,cursor:'pointer',
                     background:isSel?'rgba(0,255,170,0.1)':'rgba(255,255,255,0.02)',
-                    border:`1px solid ${isSel?'rgba(0,255,170,0.35)':'rgba(255,255,255,0.06)'}`}}>
-                  <span style={{fontSize:isMobileCanvas?22:15,lineHeight:1}}>{tile.emoji}</span>
+                    border:`1px solid ${isSel?'rgba(0,255,170,0.35)':'rgba(255,255,255,0.06)'}`
+                  }:{
+                    display:'flex',alignItems:'center',gap:7,padding:'5px 7px',borderRadius:7,
+                    cursor:'grab',marginBottom:1,
+                    background:isSel?'rgba(0,255,170,0.1)':'rgba(255,255,255,0.02)',
+                    border:`1px solid ${isSel?'rgba(0,255,170,0.35)':'rgba(255,255,255,0.06)'}`
+                  }}>
+                  <span style={{fontSize:isMobileCanvas?24:15,lineHeight:1}}>{tile.emoji}</span>
                   <span style={{fontSize:isMobileCanvas?9:10,color:'rgba(200,230,212,0.7)',fontWeight:isSel?700:400,
-                    textAlign:'center',whiteSpace:isMobileCanvas?'nowrap':'normal'}}>{tile.name}</span>
+                    textAlign:'center',lineHeight:1.15,
+                    whiteSpace:isMobileCanvas?'normal':'normal'}}>{tile.name}</span>
                 </div>
               );
             })}
