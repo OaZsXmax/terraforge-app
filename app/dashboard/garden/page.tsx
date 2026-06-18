@@ -7873,11 +7873,19 @@ export default function TerraForgeHome(){
               }}>
               🛒
             </button>
-            <button onClick={()=>setShowLogin(true)}
-              style={{width:34,height:34,borderRadius:9,cursor:'pointer',flexShrink:0,
-                display:'flex',alignItems:'center',justifyContent:'center',
-                background:'rgba(0,255,170,0.10)',border:'1px solid rgba(0,255,170,0.28)',fontSize:15,
-              }}>👤</button>
+            {isLoggedIn?(
+              <a href="/profile" title="My Profile"
+                style={{width:34,height:34,borderRadius:9,cursor:'pointer',flexShrink:0,
+                  display:'flex',alignItems:'center',justifyContent:'center',textDecoration:'none',
+                  background:'rgba(0,255,170,0.10)',border:'1px solid rgba(0,255,170,0.28)',fontSize:15,
+                }}>👤</a>
+            ):(
+              <button onClick={()=>setShowLogin(true)} title="Sign In"
+                style={{width:34,height:34,borderRadius:9,cursor:'pointer',flexShrink:0,
+                  display:'flex',alignItems:'center',justifyContent:'center',
+                  background:'rgba(0,255,170,0.10)',border:'1px solid rgba(0,255,170,0.28)',fontSize:15,
+                }}>👤</button>
+            )}
           </div>
         )}
 
