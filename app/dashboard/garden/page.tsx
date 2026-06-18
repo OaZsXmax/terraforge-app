@@ -697,6 +697,20 @@ html,body{max-width:100vw;overflow-x:hidden;}
 @media(max-width:768px){
   .tf-main{padding:12px 10px 100px;}
 }
+
+/* MOBILE PERFORMANCE OVERRIDE (<=820px): WebView can't composite heavy
+   backdrop-blur every scroll frame -> flicker+jank. Kill blur + perpetual
+   animations on phones only. Desktop unaffected. */
+@media(max-width:820px){
+  *{backdrop-filter:none !important;-webkit-backdrop-filter:none !important;}
+  *{animation-duration:0s !important;animation-delay:0s !important;animation-iteration-count:1 !important;}
+  .a-fadeUp{animation:none !important;opacity:1 !important;transform:none !important;}
+  html,body{-webkit-overflow-scrolling:touch;overscroll-behavior-y:none;touch-action:pan-y;}
+  html,body,#__next{max-width:100vw;overflow-x:hidden;}
+  [style*="grid-template-columns: repeat(4, 1fr)"],[style*="grid-template-columns:repeat(4,1fr)"]{grid-template-columns:repeat(2,1fr) !important;}
+  [style*="grid-template-columns: repeat(3, 1fr)"],[style*="grid-template-columns:repeat(3,1fr)"]{grid-template-columns:repeat(2,1fr) !important;}
+  table{display:block;overflow-x:auto;-webkit-overflow-scrolling:touch;max-width:100%;}
+}
 `;
 
 
@@ -2306,6 +2320,12 @@ declare global{interface Window{google:any;}}
 
 function PropertyCanvas({isPro,onPaywall,address}:{isPro:boolean;onPaywall:()=>void;address:string}){
   const mapRef=useRef<HTMLDivElement>(null);
+  const [isMobileCanvas,setIsMobileCanvas]=useState(false);
+  useEffect(()=>{
+    const check=()=>setIsMobileCanvas(window.innerWidth<=768);
+    check();window.addEventListener('resize',check);
+    return()=>window.removeEventListener('resize',check);
+  },[]);
   const mapInstance=useRef<any>(null);
   const geocoderRef=useRef<any>(null);
   const didInit=useRef(false);
@@ -2421,7 +2441,9 @@ function PropertyCanvas({isPro,onPaywall,address}:{isPro:boolean;onPaywall:()=>v
           {placedCount} tile{placedCount!==1?'s':''}
         </span>
         {address.trim()&&(
-          <span style={{fontSize:11,color:'rgba(0,255,170,0.4)',flexShrink:0}}>📍 {address}</span>
+          <span style={{fontSize:11,color:'rgba(0,255,170,0.4)',
+            maxWidth:isMobileCanvas?120:240,overflow:'hidden',textOverflow:'ellipsis',
+            whiteSpace:'nowrap',flexShrink:1}}>📍 {address}</span>
         )}
         <div style={{flex:1}}/>
         <button onClick={()=>setPlacingMode(p=>!p)} style={{padding:'6px 12px',borderRadius:8,
@@ -2437,12 +2459,26 @@ function PropertyCanvas({isPro,onPaywall,address}:{isPro:boolean;onPaywall:()=>v
           color:'#ff8080',fontSize:12,fontWeight:600}}>Clear</button>
       </div>
 
+      {/* Mobile how-to hint */}
+      {isMobileCanvas&&(
+        <div style={{padding:'8px 14px',borderBottom:'1px solid rgba(0,255,170,0.08)',
+          background:'rgba(0,255,170,0.03)',fontSize:11,color:'rgba(170,240,210,0.7)',
+          display:'flex',alignItems:'center',gap:6,lineHeight:1.4}}>
+          <span style={{fontSize:13}}>{placingMode?'✏️':'🖐'}</span>
+          <span>{placingMode
+            ?'Placing mode — pick a tile below, then tap a grid square. Tap an empty cell with no tile selected to erase.'
+            :'Navigate mode — drag to pan/zoom the map. Tap the Navigate button to switch to Placing.'}</span>
+        </div>
+      )}
+
       {/* Body */}
-      <div style={{display:'flex',height:520}}>
+      <div style={{display:'flex',flexDirection:isMobileCanvas?'column':'row',height:isMobileCanvas?'auto':520}}>
 
         {/* Tile palette */}
-        <div style={{width:176,flexShrink:0,display:'flex',flexDirection:'column',
-          borderRight:'1px solid rgba(0,255,170,0.1)',overflowY:'auto'}}>
+        <div style={{width:isMobileCanvas?'100%':176,flexShrink:0,display:'flex',flexDirection:'column',
+          borderRight:isMobileCanvas?'none':'1px solid rgba(0,255,170,0.1)',
+          borderBottom:isMobileCanvas?'1px solid rgba(0,255,170,0.1)':'none',
+          maxHeight:isMobileCanvas?220:'none',overflowY:'auto'}}>
           <div style={{padding:'8px 10px',borderBottom:'1px solid rgba(0,255,170,0.08)',flexShrink:0,minHeight:48}}>
             {selected?(
               <div style={{display:'flex',alignItems:'center',gap:6,padding:'5px 8px',
@@ -2468,19 +2504,26 @@ function PropertyCanvas({isPro,onPaywall,address}:{isPro:boolean;onPaywall:()=>v
               </button>
             ))}
           </div>
-          <div style={{flex:1,overflowY:'auto',padding:'2px 6px 12px'}}>
+          <div style={{flex:1,overflowY:isMobileCanvas?'hidden':'auto',overflowX:isMobileCanvas?'auto':'hidden',
+            display:isMobileCanvas?'flex':'block',flexDirection:isMobileCanvas?'row':'column',
+            gap:isMobileCanvas?6:0,padding:'2px 6px 12px',WebkitOverflowScrolling:'touch'}}>
             {CANVAS_TILES.filter(t=>t.cat===activeCat).map(tile=>{
               const isSel=selected?.emoji===tile.emoji&&selected?.name===tile.name;
               return(
-                <div key={tile.name} draggable
+                <div key={tile.name} draggable={!isMobileCanvas}
                   onDragStart={()=>{dragTile.current={emoji:tile.emoji,name:tile.name};}}
                   onClick={()=>{setSelected(isSel?null:tile);if(!isSel)setPlacingMode(true);}}
-                  style={{display:'flex',alignItems:'center',gap:7,padding:'5px 7px',
-                    borderRadius:7,cursor:'grab',marginBottom:1,
+                  style={{display:'flex',alignItems:'center',gap:7,
+                    padding:isMobileCanvas?'8px 12px':'5px 7px',
+                    borderRadius:isMobileCanvas?10:7,
+                    cursor:isMobileCanvas?'pointer':'grab',marginBottom:isMobileCanvas?0:1,
+                    flexShrink:0,flexDirection:isMobileCanvas?'column':'row',
+                    minWidth:isMobileCanvas?64:'auto',
                     background:isSel?'rgba(0,255,170,0.1)':'rgba(255,255,255,0.02)',
-                    border:`1px solid ${isSel?'rgba(0,255,170,0.35)':'transparent'}`}}>
-                  <span style={{fontSize:15,lineHeight:1}}>{tile.emoji}</span>
-                  <span style={{fontSize:10,color:'rgba(200,230,212,0.7)',fontWeight:isSel?700:400}}>{tile.name}</span>
+                    border:`1px solid ${isSel?'rgba(0,255,170,0.35)':'rgba(255,255,255,0.06)'}`}}>
+                  <span style={{fontSize:isMobileCanvas?22:15,lineHeight:1}}>{tile.emoji}</span>
+                  <span style={{fontSize:isMobileCanvas?9:10,color:'rgba(200,230,212,0.7)',fontWeight:isSel?700:400,
+                    textAlign:'center',whiteSpace:isMobileCanvas?'nowrap':'normal'}}>{tile.name}</span>
                 </div>
               );
             })}
@@ -2488,7 +2531,7 @@ function PropertyCanvas({isPro,onPaywall,address}:{isPro:boolean;onPaywall:()=>v
         </div>
 
         {/* Map + grid */}
-        <div style={{flex:1,position:'relative'}}>
+        <div style={{flex:1,position:'relative',height:isMobileCanvas?420:'auto',minHeight:isMobileCanvas?420:0}}>
           <div ref={mapRef} style={{position:'absolute',inset:0,zIndex:0}}/>
           <div style={{position:'absolute',inset:0,zIndex:1,
             display:'grid',
@@ -9197,7 +9240,7 @@ export default function TerraForgeHome(){
                           }}
                           onTouchStart={e=>{
                             // Fluid touch-drag (HTML5 drag is unreliable in WebView).
-                            // Record origin only; we decide scroll-vs-drag on first move.
+                            // Record origin only; decide scroll-vs-drag on first move.
                             if(!isMobile)return;
                             const t=e.touches[0];
                             _touchStartX=t.clientX;_touchStartY=t.clientY;
@@ -9209,12 +9252,9 @@ export default function TerraForgeHome(){
                             const dx=t.clientX-_touchStartX;
                             const dy=t.clientY-_touchStartY;
                             const adx=Math.abs(dx),ady=Math.abs(dy);
-                            // First meaningful movement decides intent ONCE.
                             if(!_touchDecided){
-                              if(adx<6&&ady<6)return;            // too small, wait
+                              if(adx<6&&ady<6)return;
                               _touchDecided=true;
-                              // Horizontal-leaning movement = grab to drag.
-                              // Vertical-leaning = let the list scroll (do nothing).
                               if(adx>ady){
                                 _touchDragArmed=true;
                                 _touchDragEmoji=item.emoji;
@@ -9226,11 +9266,11 @@ export default function TerraForgeHome(){
                                 document.body.appendChild(ghost);
                                 try{navigator.vibrate&&navigator.vibrate(12);}catch{}
                               }else{
-                                _touchDragArmed=false; // scrolling — leave it alone
+                                _touchDragArmed=false;
                               }
                             }
-                            if(!_touchDragArmed)return;          // scrolling, let browser handle
-                            e.preventDefault();                  // we own this gesture now
+                            if(!_touchDragArmed)return;
+                            e.preventDefault();
                             _touchDragMoved=true;
                             const ghost=document.getElementById('tf-touch-ghost');
                             if(ghost){ghost.style.left=t.clientX+'px';ghost.style.top=t.clientY+'px';}
@@ -9244,7 +9284,6 @@ export default function TerraForgeHome(){
                             const ghost=document.getElementById('tf-touch-ghost');
                             if(ghost)ghost.remove();
                             document.querySelectorAll('[data-grid-cell]').forEach(c=>((c as HTMLElement).style.outline=''));
-                            // Always reset this icon's visual state (touch never fires mouseleave).
                             const self=e.currentTarget as HTMLElement;
                             self.style.transform='scale(1)';self.style.boxShadow='';
                             self.style.background='rgba(0,255,170,0.04)';self.style.borderColor='rgba(0,255,170,0.10)';
@@ -9252,7 +9291,6 @@ export default function TerraForgeHome(){
                             const em=_touchDragEmoji;
                             _touchDragArmed=false;_touchDragEmoji='';_touchDecided=false;
                             if(!wasArmed){
-                              // No drag started = a tap or a scroll. Pure tap opens stats.
                               const t0=e.changedTouches[0];
                               const moved=Math.abs(t0.clientX-_touchStartX)>6||Math.abs(t0.clientY-_touchStartY)>6;
                               if(!moved)setModal({emoji:item.emoji,bpId:activeBp?.id??'',tileId:-1});
@@ -9266,7 +9304,7 @@ export default function TerraForgeHome(){
                               if(!Number.isNaN(slot))_touchDropHandler(slot,em);
                             }
                           }}
-                                                    onClick={()=>{if(!isMobile)setModal({emoji:item.emoji,bpId:activeBp?.id??'',tileId:-1});}}
+                          onClick={()=>{if(!isMobile)setModal({emoji:item.emoji,bpId:activeBp?.id??'',tileId:-1});}}
                           style={{
                             width:'100%',minHeight:isMobile?46:64,display:'flex',flexDirection:'column',
                             alignItems:'center',gap:isMobile?1:4,padding:isMobile?'4px 2px':'8px 4px 7px',borderRadius:10,
@@ -9278,12 +9316,12 @@ export default function TerraForgeHome(){
                             border:'1px solid rgba(0,255,170,0.10)',
                             transition:'transform 0.14s cubic-bezier(0.22,1,0.36,1),opacity 0.14s cubic-bezier(0.22,1,0.36,1),border-color 0.14s cubic-bezier(0.22,1,0.36,1),box-shadow 0.14s cubic-bezier(0.22,1,0.36,1)',
                           }}
-                          onMouseEnter={isMobile?undefined:(e=>{const el=e.currentTarget as HTMLElement;
+                          onMouseEnter={e=>{const el=e.currentTarget as HTMLElement;
                             el.style.background=C+'12';el.style.borderColor=C+'38';
-                            el.style.transform='scale(1.06)';el.style.boxShadow='0 0 12px '+C+'20';})}
-                          onMouseLeave={isMobile?undefined:(e=>{const el=e.currentTarget as HTMLElement;
+                            el.style.transform='scale(1.06)';el.style.boxShadow='0 0 12px '+C+'20';}}
+                          onMouseLeave={e=>{const el=e.currentTarget as HTMLElement;
                             el.style.background='rgba(0,255,170,0.04)';el.style.borderColor='rgba(0,255,170,0.10)';
-                            el.style.transform='scale(1)';el.style.boxShadow='';})}
+                            el.style.transform='scale(1)';el.style.boxShadow='';}}
                           title={item.name+' — click for stats · drag to map'}>
                           <FeatureIcon emoji={item.emoji} size={isMobile?18:22}/>
                           <span style={{
