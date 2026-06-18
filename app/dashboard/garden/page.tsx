@@ -2629,13 +2629,22 @@ function PropertyCanvas({isPro,onPaywall,address,blueprints}:{isPro:boolean;onPa
           }:{
             flex:1,overflowY:'auto',overflowX:'hidden',display:'block',padding:'2px 6px 12px',touchAction:'pan-y'
           }}>
-            {activeCat==='__blueprints'?(
-              blueprints.length===0?(
+            {activeCat==='__blueprints'?(()=>{
+              // Only show blueprints the user has actually built — ones with real
+              // placed tiles. Empty/default scaffolding blueprints are hidden.
+              const realBlueprints=blueprints.filter(bp=>{
+                const meaningful=bp.tiles.filter(t=>t.icon);
+                // Hide empty blueprints and the default scaffold (a lone seed tile).
+                if(meaningful.length===0)return false;
+                if(meaningful.length===1&&meaningful[0].icon==='🌱')return false;
+                return true;
+              });
+              return realBlueprints.length===0?(
                 <div style={{fontSize:11,color:'rgba(170,240,210,0.5)',padding:'10px 8px',
                   whiteSpace:'normal',lineHeight:1.5}}>
-                  No blueprints yet. Build a Property Map or Raised Bed first, then drag it here onto your land.
+                  No blueprints yet. Build a Property Map or Raised Bed first (add features to it), then drag it here onto your land.
                 </div>
-              ):blueprints.map(bp=>{
+              ):realBlueprints.map(bp=>{
                 const {w,h}=blueprintFootprint(bp.gridCols);
                 const bpEmoji=bp.tiles[0]?.icon||(bp.type==='property'?'🏡':bp.type==='raised-bed'?'🌱':'🌿');
                 const isSelBp=selectedBp?.id===bp.id;
@@ -2666,8 +2675,8 @@ function PropertyCanvas({isPro,onPaywall,address,blueprints}:{isPro:boolean;onPa
                     </div>
                   </div>
                 );
-              })
-            ):CANVAS_TILES.filter(t=>t.cat===activeCat).map(tile=>{
+              });
+            })():CANVAS_TILES.filter(t=>t.cat===activeCat).map(tile=>{
               const isSel=selected?.emoji===tile.emoji&&selected?.name===tile.name;
               return(
                 <div key={tile.name} draggable={!isMobileCanvas}
