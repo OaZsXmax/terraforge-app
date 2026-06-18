@@ -2558,41 +2558,16 @@ function PropertyCanvas({isPro,onPaywall,address,blueprints}:{isPro:boolean;onPa
             whiteSpace:'nowrap',flexShrink:1}}>📍 {address}</span>
         )}
         <div style={{flex:1}}/>
-        <button onClick={()=>setPlacingMode(p=>!p)} style={{padding:'6px 12px',borderRadius:8,
-          cursor:'pointer',flexShrink:0,fontSize:12,fontWeight:700,
-          background:placingMode?'rgba(0,255,170,0.18)':'rgba(255,255,255,0.05)',
-          border:`1px solid ${placingMode?'rgba(0,255,170,0.45)':'rgba(255,255,255,0.12)'}`,
-          color:placingMode?'#00ffaa':'rgba(200,230,212,0.5)'}}>
-          {placingMode?'✏️ Placing':'🖐 Navigate'}
-        </button>
-        <button onClick={()=>setShowSaveDialog(true)} style={{padding:'6px 12px',borderRadius:8,
-          cursor:'pointer',flexShrink:0,fontSize:12,fontWeight:700,
-          background:'rgba(0,255,170,0.1)',border:'1px solid rgba(0,255,170,0.28)',color:'#00ffaa'}}>
-          💾 Save
-        </button>
-        <button onClick={()=>setShowLoadDialog(true)} style={{padding:'6px 12px',borderRadius:8,
-          cursor:'pointer',flexShrink:0,fontSize:12,fontWeight:700,
-          background:'rgba(255,255,255,0.05)',border:'1px solid rgba(255,255,255,0.12)',
-          color:'rgba(200,230,212,0.6)'}}>
-          📂 Load{savedLayouts.length>0?` (${savedLayouts.length})`:''}
-        </button>
-        <button onClick={()=>{if(confirm('Clear all canvas tiles and blueprint blocks?')){setCells({});setBlocks([]);}}} style={{
-          padding:'6px 10px',borderRadius:8,cursor:'pointer',flexShrink:0,
-          background:'rgba(255,80,80,0.08)',border:'1px solid rgba(255,80,80,0.2)',
-          color:'#ff8080',fontSize:12,fontWeight:600}}>Clear</button>
       </div>
 
-      {/* Mobile how-to hint */}
-      {isMobileCanvas&&(
-        <div style={{padding:'8px 14px',borderBottom:'1px solid rgba(0,255,170,0.08)',
-          background:'rgba(0,255,170,0.03)',fontSize:11,color:'rgba(170,240,210,0.7)',
-          display:'flex',alignItems:'center',gap:6,lineHeight:1.4}}>
-          <span style={{fontSize:13}}>{placingMode?'✏️':'🖐'}</span>
-          <span>{placingMode
-            ?(selectedBp
-              ?`Tap the map to drop "${selectedBp.name}" as a block. Drag its corner to resize.`
-              :'Placing mode — pick a tile or blueprint, then tap the grid. Tap a placed tile to remove it.')
-            :'Navigate mode — drag to pan/zoom the map. Tap the Navigate button to switch to Placing.'}</span>
+      {/* Compact contextual hint — only when actively placing */}
+      {isMobileCanvas&&placingMode&&(selected||selectedBp)&&(
+        <div style={{padding:'7px 14px',borderBottom:'1px solid rgba(0,255,170,0.08)',
+          background:'rgba(0,255,170,0.05)',fontSize:11,color:'#00ffaa',fontWeight:600,
+          display:'flex',alignItems:'center',gap:6,lineHeight:1.35}}>
+          <span>{selectedBp
+            ?`Tap the map to drop "${selectedBp.name}" — drag its corner to resize`
+            :`Tap the grid to place ${selected?.emoji} ${selected?.name} · tap a placed tile to remove`}</span>
         </div>
       )}
 
@@ -2607,6 +2582,7 @@ function PropertyCanvas({isPro,onPaywall,address,blueprints}:{isPro:boolean;onPa
           borderBottom:isMobileCanvas?'1px solid rgba(0,255,170,0.1)':'none',
           overflow:isMobileCanvas?'hidden':'visible',
           overflowY:isMobileCanvas?undefined:'auto'}}>
+          {!isMobileCanvas&&(
           <div style={{padding:'8px 10px',borderBottom:'1px solid rgba(0,255,170,0.08)',flexShrink:0,minHeight:48}}>
             {selected?(
               <div style={{display:'flex',alignItems:'center',gap:6,padding:'5px 8px',
@@ -2621,6 +2597,7 @@ function PropertyCanvas({isPro,onPaywall,address,blueprints}:{isPro:boolean;onPa
                 lineHeight:1.5,paddingTop:4}}>Select a tile<br/>then click grid</div>
             )}
           </div>
+          )}
           <div style={{display:'flex',flexWrap:'wrap',gap:2,padding:'6px 8px 4px',flexShrink:0}}>
             {cats.map(cat=>(
               <button key={cat} onClick={()=>setActiveCat(cat)}
@@ -2714,8 +2691,42 @@ function PropertyCanvas({isPro,onPaywall,address,blueprints}:{isPro:boolean;onPa
         </div>
 
         {/* Map + grid */}
-        <div style={{flex:1,position:'relative',height:isMobileCanvas?420:'auto',minHeight:isMobileCanvas?420:0}}>
+        <div style={{flex:1,position:'relative',height:isMobileCanvas?440:'auto',minHeight:isMobileCanvas?440:0}}>
           <div ref={mapRef} style={{position:'absolute',inset:0,zIndex:0}}/>
+
+          {/* Floating Navigate/Place toggle — sits ON the map where you work */}
+          <button onClick={()=>setPlacingMode(p=>!p)} style={{position:'absolute',
+            top:10,left:'50%',transform:'translateX(-50%)',zIndex:8,
+            padding:'9px 20px',borderRadius:99,cursor:'pointer',fontSize:13,fontWeight:800,
+            fontFamily:"'Space Grotesk',sans-serif",whiteSpace:'nowrap',
+            background:placingMode?'rgba(0,255,170,0.95)':'rgba(10,31,21,0.92)',
+            border:`1.5px solid ${placingMode?'#00ffaa':'rgba(255,255,255,0.25)'}`,
+            color:placingMode?'#051a0e':'#fff',
+            boxShadow:'0 4px 16px rgba(0,0,0,0.45)',backdropFilter:'blur(4px)'}}>
+            {placingMode?'✏️ Placing — tap to navigate':'🖐 Navigate — tap to place'}
+          </button>
+
+          {/* Floating action buttons — bottom-right of the map */}
+          <div style={{position:'absolute',bottom:12,right:12,zIndex:8,display:'flex',gap:6}}>
+            <button onClick={()=>setShowSaveDialog(true)} title="Save layout" style={{
+              width:38,height:38,borderRadius:10,cursor:'pointer',fontSize:16,
+              background:'rgba(10,31,21,0.92)',border:'1px solid rgba(0,255,170,0.35)',
+              boxShadow:'0 2px 10px rgba(0,0,0,0.4)',backdropFilter:'blur(4px)'}}>💾</button>
+            <button onClick={()=>setShowLoadDialog(true)} title="Load layout" style={{
+              position:'relative',width:38,height:38,borderRadius:10,cursor:'pointer',fontSize:16,
+              background:'rgba(10,31,21,0.92)',border:'1px solid rgba(255,255,255,0.2)',
+              boxShadow:'0 2px 10px rgba(0,0,0,0.4)',backdropFilter:'blur(4px)'}}>📂
+              {savedLayouts.length>0&&<span style={{position:'absolute',top:-5,right:-5,
+                background:'#00ffaa',color:'#051a0e',fontSize:9,fontWeight:800,borderRadius:99,
+                minWidth:16,height:16,display:'flex',alignItems:'center',justifyContent:'center',
+                padding:'0 3px'}}>{savedLayouts.length}</span>}
+            </button>
+            <button onClick={()=>{if(confirm('Clear all canvas tiles and blueprint blocks?')){setCells({});setBlocks([]);}}}
+              title="Clear canvas" style={{width:38,height:38,borderRadius:10,cursor:'pointer',fontSize:15,
+              background:'rgba(10,31,21,0.92)',border:'1px solid rgba(255,80,80,0.35)',
+              boxShadow:'0 2px 10px rgba(0,0,0,0.4)',backdropFilter:'blur(4px)'}}>🗑️</button>
+          </div>
+
           {/* Grid overlay: a centered SQUARE so every cell is square on all screens */}
           <div style={{position:'absolute',inset:0,zIndex:1,display:'flex',
             alignItems:'center',justifyContent:'center',
@@ -2807,16 +2818,6 @@ function PropertyCanvas({isPro,onPaywall,address,blueprints}:{isPro:boolean;onPa
                 <div style={{fontSize:28,marginBottom:10}}>🛰️</div>
                 <div style={{color:'#00ffaa',fontSize:13,fontWeight:600}}>Loading satellite map…</div>
               </div>
-            </div>
-          )}
-          {mapLoaded&&(
-            <div style={{position:'absolute',bottom:10,left:'50%',transform:'translateX(-50%)',
-              background:'rgba(10,31,21,0.9)',border:'1px solid rgba(0,255,170,0.15)',
-              borderRadius:8,padding:'5px 12px',fontSize:10,color:'rgba(0,255,170,0.6)',
-              pointerEvents:'none',zIndex:10,whiteSpace:'nowrap'}}>
-              {placingMode
-                ?`✏️ ${selected?`Click to place ${selected.emoji} ${selected.name}`:'Click cell to erase · select a tile to place'}`
-                :'🖐 Navigate — pan & zoom freely · switch to Placing to add tiles'}
             </div>
           )}
         </div>
