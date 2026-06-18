@@ -710,8 +710,11 @@ html,body{max-width:100vw;overflow-x:hidden;}
   [style*="grid-template-columns: repeat(4, 1fr)"],[style*="grid-template-columns:repeat(4,1fr)"]{grid-template-columns:repeat(2,1fr) !important;}
   [style*="grid-template-columns: repeat(3, 1fr)"],[style*="grid-template-columns:repeat(3,1fr)"]{grid-template-columns:repeat(2,1fr) !important;}
   table{display:block;overflow-x:auto;-webkit-overflow-scrolling:touch;max-width:100%;}
-  /* Canvas tile strip must scroll horizontally despite the global pan-y */
-  .tf-canvas-strip{touch-action:pan-x !important;overflow-x:auto !important;-webkit-overflow-scrolling:touch;}
+  /* Canvas tile strip must scroll horizontally despite the global pan-y.
+     min-width:0 + max-width:100% defeats the flexbox min-content default that
+     was making the strip grow to fit all icons instead of overflowing. */
+  .tf-canvas-strip{touch-action:pan-x !important;overflow-x:auto !important;overflow-y:hidden !important;
+    -webkit-overflow-scrolling:touch;min-width:0 !important;max-width:100% !important;}
   .tf-canvas-strip>*{flex:0 0 auto !important;}
 }
 `;
@@ -2525,9 +2528,9 @@ function PropertyCanvas({isPro,onPaywall,address}:{isPro:boolean;onPaywall:()=>v
 
         {/* Tile palette */}
         <div style={{width:isMobileCanvas?'100%':176,flexShrink:0,display:'flex',flexDirection:'column',
+          minWidth:0,maxWidth:'100%',
           borderRight:isMobileCanvas?'none':'1px solid rgba(0,255,170,0.1)',
           borderBottom:isMobileCanvas?'1px solid rgba(0,255,170,0.1)':'none',
-          maxHeight:isMobileCanvas?'none':'none',
           overflowY:isMobileCanvas?'visible':'auto'}}>
           <div style={{padding:'8px 10px',borderBottom:'1px solid rgba(0,255,170,0.08)',flexShrink:0,minHeight:48}}>
             {selected?(
@@ -2555,7 +2558,8 @@ function PropertyCanvas({isPro,onPaywall,address}:{isPro:boolean;onPaywall:()=>v
             ))}
           </div>
           <div className={isMobileCanvas?'tf-canvas-strip':''} style={{
-            flex:isMobileCanvas?'none':1,width:isMobileCanvas?'100%':'auto',
+            flex:isMobileCanvas?'none':1,
+            width:isMobileCanvas?'100%':'auto',minWidth:0,maxWidth:'100%',
             overflowY:isMobileCanvas?'hidden':'auto',overflowX:isMobileCanvas?'auto':'hidden',
             display:isMobileCanvas?'flex':'block',flexDirection:isMobileCanvas?'row':'column',
             flexWrap:'nowrap',gap:isMobileCanvas?6:0,padding:'2px 6px 12px',
