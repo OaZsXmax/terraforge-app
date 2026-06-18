@@ -2294,38 +2294,34 @@ const ONBOARDING_STEPS=[
 ];
 
 // ─── Property Canvas ──────────────────────────────────────────────────────────
-const CANVAS_TILES=[
-  {name:'Raised Bed',emoji:'🌱',cat:'food'},{name:'Greenhouse',emoji:'🏡',cat:'food'},
-  {name:'Herb Spiral',emoji:'🌿',cat:'food'},{name:'Tomatoes',emoji:'🍅',cat:'food'},
-  {name:'Apple Tree',emoji:'🍎',cat:'food'},{name:'Lemon Tree',emoji:'🍋',cat:'food'},
-  {name:'Pear Tree',emoji:'🍐',cat:'food'},{name:'Peach Tree',emoji:'🍑',cat:'food'},
-  {name:'Mango Tree',emoji:'🥭',cat:'food'},{name:'Avocado',emoji:'🥑',cat:'food'},
-  {name:'Banana Tree',emoji:'🍌',cat:'food'},{name:'Orange Tree',emoji:'🍊',cat:'food'},
-  {name:'Cherry Tree',emoji:'🍒',cat:'food'},{name:'Blueberries',emoji:'🫐',cat:'food'},
-  {name:'Grapes',emoji:'🍇',cat:'food'},{name:'Strawberries',emoji:'🍓',cat:'food'},
-  {name:'Corn',emoji:'🌽',cat:'food'},{name:'Carrots',emoji:'🥕',cat:'food'},
-  {name:'Kale',emoji:'🥬',cat:'food'},{name:'Potatoes',emoji:'🥔',cat:'food'},
-  {name:'Beans',emoji:'🫘',cat:'food'},{name:'Pumpkin',emoji:'🎃',cat:'food'},
-  {name:'Rain Tank',emoji:'💧',cat:'water'},{name:'Swale',emoji:'🌊',cat:'water'},
-  {name:'Pond',emoji:'🐟',cat:'water'},{name:'Cistern',emoji:'🪣',cat:'water'},
-  {name:'Rain Garden',emoji:'🌧️',cat:'water'},{name:'Drip Irrigation',emoji:'🚿',cat:'water'},
-  {name:'Solar Panel',emoji:'☀️',cat:'energy'},{name:'Wind Turbine',emoji:'🌬️',cat:'energy'},
-  {name:'Solar Battery',emoji:'🔋',cat:'energy'},{name:'Solar Pump',emoji:'⚡',cat:'energy'},
-  {name:'Compost Bin',emoji:'♻️',cat:'soil'},{name:'Hugelkultur',emoji:'🌲',cat:'soil'},
-  {name:'Cover Crops',emoji:'🌾',cat:'soil'},{name:'Mulch Zone',emoji:'🍂',cat:'soil'},
-  {name:'Chicken Coop',emoji:'🐔',cat:'animals'},{name:'Beehive',emoji:'🐝',cat:'animals'},
-  {name:'Duck Pond',emoji:'🦆',cat:'animals'},{name:'Rabbit Hutch',emoji:'🐇',cat:'animals'},
-  {name:'Native Plants',emoji:'🌸',cat:'bio'},{name:'Wildflower',emoji:'🌼',cat:'bio'},
-  {name:'Food Forest',emoji:'🌳',cat:'bio'},{name:'Hedgerow',emoji:'🌿',cat:'bio'},
-];
-const CAT_COLORS:Record<string,string>={food:'#00ffaa',water:'#00d4ff',energy:'#facc15',soil:'#d97706',animals:'#f472b6',bio:'#a78bfa'};
-const CAT_LABELS:Record<string,string>={food:'Food',water:'Water',energy:'Energy',soil:'Soil',animals:'Animals',bio:'Bio'};
+const CANVAS_TILES=iconLibrary.map(i=>({
+  name:i.name,emoji:i.emoji,
+  // canvas uses short category keys; map the library's category names
+  cat:i.category==='biodiversity'?'bio':i.category
+}))
+const CAT_COLORS:Record<string,string>={food:'#00ffaa',water:'#00d4ff',energy:'#facc15',soil:'#d97706',animals:'#f472b6',bio:'#a78bfa',flowers:'#ff80ab'};
+const CAT_LABELS:Record<string,string>={food:'Food',water:'Water',energy:'Energy',soil:'Soil',animals:'Animals',bio:'Bio',flowers:'Flowers'};
 const CANVAS_GRID=14;
 type CanvasCell={emoji:string;name:string};
 type CanvasState=Record<number,CanvasCell>;
+// A blueprint placed on the canvas as a multi-cell block.
+type CanvasBlock={
+  id:string;blueprintId:string;name:string;type:string;
+  emoji:string;          // representative emoji for the block badge
+  row:number;col:number; // top-left position on the 14x14 grid (0-indexed)
+  w:number;h:number;     // footprint size in cells
+  tiles:{id:number;icon:string}[]; // snapshot of the blueprint's tiles for preview
+  gridCols:number;       // source blueprint columns (for the mini-preview)
+};
+// Scale a blueprint's grid to a sensible canvas footprint.
+// e.g. an 8-col blueprint -> 4x4; a 6-col -> 3x3; clamped to 2..8.
+function blueprintFootprint(gridCols:number):{w:number;h:number}{
+  const s=Math.max(2,Math.min(8,Math.round(gridCols/2)));
+  return{w:s,h:s};
+}
 declare global{interface Window{google:any;}}
 
-function PropertyCanvas({isPro,onPaywall,address}:{isPro:boolean;onPaywall:()=>void;address:string}){
+function PropertyCanvas({isPro,onPaywall,address,blueprints}:{isPro:boolean;onPaywall:()=>void;address:string;blueprints:Blueprint[]}){
   const mapRef=useRef<HTMLDivElement>(null);
   const [isMobileCanvas,setIsMobileCanvas]=useState(false);
   useEffect(()=>{
@@ -2339,6 +2335,15 @@ function PropertyCanvas({isPro,onPaywall,address}:{isPro:boolean;onPaywall:()=>v
   const [cells,setCells]=useState<CanvasState>(()=>{
     try{const s=localStorage.getItem('tf-canvas-v1');return s?JSON.parse(s):{};}catch{return {};}
   });
+  // Placed blueprint BLOCKS — a blueprint dropped on the canvas spans many cells.
+  // row/col = top-left position (0-indexed on the 14x14 grid); w/h = footprint size.
+  const [blocks,setBlocks]=useState<CanvasBlock[]>(()=>{
+    try{const s=localStorage.getItem('tf-canvas-blocks-v1');return s?JSON.parse(s):[];}catch{return [];}
+  });
+  useEffect(()=>{try{localStorage.setItem('tf-canvas-blocks-v1',JSON.stringify(blocks));}catch{}},[blocks]);
+  const [openBlockId,setOpenBlockId]=useState<string|null>(null); // tap-to-expand
+  const dragBlueprint=useRef<Blueprint|null>(null); // blueprint being dragged from palette
+  const [selectedBp,setSelectedBp]=useState<Blueprint|null>(null); // tap-to-place on mobile
   const [selected,setSelected]=useState<{emoji:string;name:string}|null>(null);
   const [activeCat,setActiveCat]=useState('food');
   const [mapLoaded,setMapLoaded]=useState(false);
@@ -2349,7 +2354,7 @@ function PropertyCanvas({isPro,onPaywall,address}:{isPro:boolean;onPaywall:()=>v
   // Named canvas saves — lets users keep multiple property layouts and
   // come back to finish later. Stored separately from blueprints because a
   // canvas is tied to the physical property, not a design iteration.
-  type CanvasSave={id:string;name:string;cells:CanvasState;savedAt:string};
+  type CanvasSave={id:string;name:string;cells:CanvasState;blocks?:CanvasBlock[];savedAt:string};
   const [savedLayouts,setSavedLayouts]=useState<CanvasSave[]>(()=>{
     try{const s=localStorage.getItem('tf-canvas-saves');return s?JSON.parse(s):[];}catch{return [];}
   });
@@ -2363,12 +2368,63 @@ function PropertyCanvas({isPro,onPaywall,address}:{isPro:boolean;onPaywall:()=>v
   }
   function saveCurrentLayout(){
     const name=saveName.trim()||`Layout ${savedLayouts.length+1}`;
-    const entry:CanvasSave={id:'cs_'+Date.now(),name,cells:{...cells},savedAt:new Date().toISOString()};
+    const entry:CanvasSave={id:'cs_'+Date.now(),name,cells:{...cells},blocks:[...blocks],savedAt:new Date().toISOString()};
     persistSaves([entry,...savedLayouts].slice(0,20));
     setSaveName('');setShowSaveDialog(false);
   }
-  function loadLayout(s:CanvasSave){setCells({...s.cells});setShowLoadDialog(false);}
+  function loadLayout(s:CanvasSave){setCells({...s.cells});setBlocks(s.blocks?[...s.blocks]:[]);setShowLoadDialog(false);}
   function deleteLayout(id:string){persistSaves(savedLayouts.filter(s=>s.id!==id));}
+
+  // ---- Blueprint BLOCK placement on the canvas ----
+  function placeBlockAt(bp:Blueprint,row:number,col:number){
+    const {w,h}=blueprintFootprint(bp.gridCols);
+    // clamp so the block stays fully on the 14x14 grid
+    const r=Math.max(0,Math.min(CANVAS_GRID-h,row));
+    const c=Math.max(0,Math.min(CANVAS_GRID-w,col));
+    const block:CanvasBlock={
+      id:'blk_'+Date.now(),blueprintId:bp.id,name:bp.name,type:bp.type,
+      emoji:bp.tiles[0]?.icon||(bp.type==='property'?'🏡':bp.type==='raised-bed'?'🌱':'🌿'),
+      row:r,col:c,w,h,tiles:bp.tiles.slice(0,64),gridCols:bp.gridCols,
+    };
+    setBlocks(prev=>[...prev,block]);
+  }
+  function moveBlock(id:string,row:number,col:number){
+    setBlocks(prev=>prev.map(b=>{
+      if(b.id!==id)return b;
+      const r=Math.max(0,Math.min(CANVAS_GRID-b.h,row));
+      const c=Math.max(0,Math.min(CANVAS_GRID-b.w,col));
+      return{...b,row:r,col:c};
+    }));
+  }
+  function resizeBlock(id:string,w:number,h:number){
+    setBlocks(prev=>prev.map(b=>{
+      if(b.id!==id)return b;
+      const nw=Math.max(2,Math.min(CANVAS_GRID-b.col,w));
+      const nh=Math.max(2,Math.min(CANVAS_GRID-b.row,h));
+      return{...b,w:nw,h:nh};
+    }));
+  }
+  function removeBlock(id:string){setBlocks(prev=>prev.filter(b=>b.id!==id));setOpenBlockId(null);}
+  // Drag the corner handle to resize a block in whole-cell steps.
+  function startBlockResize(e:React.MouseEvent|React.TouchEvent,blk:CanvasBlock){
+    const gridEl=(e.currentTarget as HTMLElement).closest('[data-canvas-grid]') as HTMLElement|null;
+    if(!gridEl)return;
+    const rect=gridEl.getBoundingClientRect();
+    const cellW=rect.width/CANVAS_GRID, cellH=rect.height/CANVAS_GRID;
+    const move=(cx:number,cy:number)=>{
+      const wCells=Math.round((cx-rect.left)/cellW)-blk.col;
+      const hCells=Math.round((cy-rect.top)/cellH)-blk.row;
+      resizeBlock(blk.id,wCells,hCells);
+    };
+    const mm=(ev:MouseEvent)=>{ev.preventDefault();move(ev.clientX,ev.clientY);};
+    const tm=(ev:TouchEvent)=>{ev.preventDefault();const t=ev.touches[0];move(t.clientX,t.clientY);};
+    const up=()=>{
+      window.removeEventListener('mousemove',mm);window.removeEventListener('mouseup',up);
+      window.removeEventListener('touchmove',tm);window.removeEventListener('touchend',up);
+    };
+    window.addEventListener('mousemove',mm);window.addEventListener('mouseup',up);
+    window.addEventListener('touchmove',tm,{passive:false});window.addEventListener('touchend',up);
+  }
 
   // Persist tiles — survives close, refresh, everything (working draft)
   useEffect(()=>{try{localStorage.setItem('tf-canvas-v1',JSON.stringify(cells));}catch{}},[cells]);
@@ -2423,6 +2479,12 @@ function PropertyCanvas({isPro,onPaywall,address}:{isPro:boolean;onPaywall:()=>v
 
   function handleCellClick(i:number){
     if(!placingMode)return;
+    // Mobile: if a blueprint is selected, tapping places it as a block.
+    if(isMobileCanvas&&selectedBp){
+      placeBlockAt(selectedBp,Math.floor(i/CANVAS_GRID),i%CANVAS_GRID);
+      setSelectedBp(null);
+      return;
+    }
     if(isMobileCanvas){
       // Mobile: tapping a filled cell removes it (toggle) — reliable erase
       // since a tile usually stays selected. Empty cell places the selection.
@@ -2439,6 +2501,14 @@ function PropertyCanvas({isPro,onPaywall,address}:{isPro:boolean;onPaywall:()=>v
   }
 
   function handleDrop(i:number){
+    // Blueprint block drop takes priority if one is being dragged.
+    if(dragBlueprint.current){
+      const bp=dragBlueprint.current;
+      placeBlockAt(bp,Math.floor(i/CANVAS_GRID),i%CANVAS_GRID);
+      dragBlueprint.current=null;
+      setPlacingMode(true);
+      return;
+    }
     const t=dragTile.current;
     if(!t)return;
     setCells(p=>({...p,[i]:{emoji:t.emoji,name:t.name}}));
@@ -2506,7 +2576,7 @@ function PropertyCanvas({isPro,onPaywall,address}:{isPro:boolean;onPaywall:()=>v
           color:'rgba(200,230,212,0.6)'}}>
           📂 Load{savedLayouts.length>0?` (${savedLayouts.length})`:''}
         </button>
-        <button onClick={()=>{if(confirm('Clear all canvas tiles?'))setCells({});}} style={{
+        <button onClick={()=>{if(confirm('Clear all canvas tiles and blueprint blocks?')){setCells({});setBlocks([]);}}} style={{
           padding:'6px 10px',borderRadius:8,cursor:'pointer',flexShrink:0,
           background:'rgba(255,80,80,0.08)',border:'1px solid rgba(255,80,80,0.2)',
           color:'#ff8080',fontSize:12,fontWeight:600}}>Clear</button>
@@ -2519,7 +2589,9 @@ function PropertyCanvas({isPro,onPaywall,address}:{isPro:boolean;onPaywall:()=>v
           display:'flex',alignItems:'center',gap:6,lineHeight:1.4}}>
           <span style={{fontSize:13}}>{placingMode?'✏️':'🖐'}</span>
           <span>{placingMode
-            ?'Placing mode — pick a tile, then tap a grid square to place it. Tap any placed tile to remove it.'
+            ?(selectedBp
+              ?`Tap the map to drop "${selectedBp.name}" as a block. Drag its corner to resize.`
+              :'Placing mode — pick a tile or blueprint, then tap the grid. Tap a placed tile to remove it.')
             :'Navigate mode — drag to pan/zoom the map. Tap the Navigate button to switch to Placing.'}</span>
         </div>
       )}
@@ -2559,6 +2631,13 @@ function PropertyCanvas({isPro,onPaywall,address}:{isPro:boolean;onPaywall:()=>v
                 {CAT_LABELS[cat]}
               </button>
             ))}
+            <button onClick={()=>setActiveCat('__blueprints')}
+              style={{padding:'2px 9px',borderRadius:99,fontSize:9,fontWeight:800,cursor:'pointer',
+                background:activeCat==='__blueprints'?'#ffb340':'rgba(255,179,64,0.1)',
+                border:`1px solid ${activeCat==='__blueprints'?'#ffb340':'rgba(255,179,64,0.4)'}`,
+                color:activeCat==='__blueprints'?'#1a1206':'#ffb340'}}>
+              🗺️ Blueprints
+            </button>
           </div>
           <div className={isMobileCanvas?'tf-canvas-strip':''} style={isMobileCanvas?{
             // MOBILE: plain block scroller — whitespace:nowrap + inline-block children.
@@ -2568,7 +2647,45 @@ function PropertyCanvas({isPro,onPaywall,address}:{isPro:boolean;onPaywall:()=>v
           }:{
             flex:1,overflowY:'auto',overflowX:'hidden',display:'block',padding:'2px 6px 12px',touchAction:'pan-y'
           }}>
-            {CANVAS_TILES.filter(t=>t.cat===activeCat).map(tile=>{
+            {activeCat==='__blueprints'?(
+              blueprints.length===0?(
+                <div style={{fontSize:11,color:'rgba(170,240,210,0.5)',padding:'10px 8px',
+                  whiteSpace:'normal',lineHeight:1.5}}>
+                  No blueprints yet. Build a Property Map or Raised Bed first, then drag it here onto your land.
+                </div>
+              ):blueprints.map(bp=>{
+                const {w,h}=blueprintFootprint(bp.gridCols);
+                const bpEmoji=bp.tiles[0]?.icon||(bp.type==='property'?'🏡':bp.type==='raised-bed'?'🌱':'🌿');
+                const isSelBp=selectedBp?.id===bp.id;
+                return(
+                  <div key={bp.id} draggable={!isMobileCanvas}
+                    onDragStart={()=>{dragBlueprint.current=bp;dragTile.current=null;}}
+                    onClick={()=>{
+                      if(isMobileCanvas){setSelectedBp(isSelBp?null:bp);setSelected(null);if(!isSelBp)setPlacingMode(true);}
+                    }}
+                    style={isMobileCanvas?{
+                      display:'inline-flex',flexDirection:'column',alignItems:'flex-start',gap:2,
+                      verticalAlign:'top',whiteSpace:'normal',width:120,marginRight:6,
+                      padding:'8px 10px',borderRadius:10,cursor:'pointer',
+                      background:isSelBp?'rgba(255,179,64,0.16)':'rgba(255,179,64,0.06)',
+                      border:`1px solid ${isSelBp?'rgba(255,179,64,0.6)':'rgba(255,179,64,0.25)'}`
+                    }:{
+                      display:'flex',alignItems:'center',gap:8,padding:'8px 10px',borderRadius:9,
+                      cursor:'grab',marginBottom:5,
+                      background:'rgba(255,179,64,0.06)',border:'1px solid rgba(255,179,64,0.25)'
+                    }}>
+                    <span style={{fontSize:isMobileCanvas?20:18,lineHeight:1}}>{bpEmoji}</span>
+                    <div style={{minWidth:0,flex:1}}>
+                      <div style={{fontSize:isMobileCanvas?11:12,fontWeight:700,color:'#ffd591',
+                        overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{bp.name}</div>
+                      <div style={{fontSize:9,color:'rgba(255,179,64,0.6)'}}>
+                        {bp.tiles.length} tiles · {w}×{h} block
+                      </div>
+                    </div>
+                  </div>
+                );
+              })
+            ):CANVAS_TILES.filter(t=>t.cat===activeCat).map(tile=>{
               const isSel=selected?.emoji===tile.emoji&&selected?.name===tile.name;
               return(
                 <div key={tile.name} draggable={!isMobileCanvas}
@@ -2603,7 +2720,7 @@ function PropertyCanvas({isPro,onPaywall,address}:{isPro:boolean;onPaywall:()=>v
           <div style={{position:'absolute',inset:0,zIndex:1,display:'flex',
             alignItems:'center',justifyContent:'center',
             pointerEvents:placingMode?'all':'none'}}>
-          <div style={{
+          <div data-canvas-grid="1" style={{
             aspectRatio:'1',
             height:'min(100%,100vw)',maxHeight:'100%',
             width:'auto',maxWidth:'100%',
@@ -2641,6 +2758,46 @@ function PropertyCanvas({isPro,onPaywall,address}:{isPro:boolean;onPaywall:()=>v
                 )}
               </div>
             ))}
+            {/* Placed blueprint BLOCKS — span multiple cells via grid-area */}
+            {blocks.map(blk=>(
+              <div key={blk.id}
+                onClick={e=>{e.stopPropagation();setOpenBlockId(blk.id);}}
+                style={{
+                  gridColumn:`${blk.col+1} / span ${blk.w}`,
+                  gridRow:`${blk.row+1} / span ${blk.h}`,
+                  zIndex:6,position:'relative',
+                  border:'2px solid rgba(0,255,170,0.7)',borderRadius:8,
+                  background:'rgba(8,28,18,0.82)',
+                  boxShadow:'0 4px 18px rgba(0,0,0,0.5)',
+                  display:'flex',flexDirection:'column',overflow:'hidden',
+                  cursor:'pointer',pointerEvents:'all'}}>
+                {/* Header label */}
+                <div style={{display:'flex',alignItems:'center',gap:4,padding:'3px 6px',
+                  background:'rgba(0,255,170,0.16)',borderBottom:'1px solid rgba(0,255,170,0.3)',
+                  fontSize:9,fontWeight:800,color:'#00ffaa',whiteSpace:'nowrap',
+                  overflow:'hidden',textOverflow:'ellipsis',lineHeight:1.2,flexShrink:0}}>
+                  <span style={{fontSize:11}}>{blk.emoji}</span>
+                  <span style={{overflow:'hidden',textOverflow:'ellipsis'}}>{blk.name}</span>
+                </div>
+                {/* Mini preview of the blueprint's tiles */}
+                <div style={{flex:1,display:'grid',
+                  gridTemplateColumns:`repeat(${Math.min(blk.gridCols,8)},1fr)`,
+                  gap:1,padding:2,alignContent:'start',overflow:'hidden'}}>
+                  {blk.tiles.slice(0,Math.min(blk.gridCols,8)*Math.min(blk.gridCols,8)).map((t,ti)=>(
+                    <div key={ti} style={{display:'flex',alignItems:'center',justifyContent:'center',
+                      fontSize:7,lineHeight:1,aspectRatio:'1'}}>{t.icon}</div>
+                  ))}
+                </div>
+                {/* Resize handle (bottom-right) */}
+                <div
+                  onMouseDown={e=>{e.stopPropagation();startBlockResize(e,blk);}}
+                  onTouchStart={e=>{e.stopPropagation();startBlockResize(e,blk);}}
+                  style={{position:'absolute',right:0,bottom:0,width:16,height:16,
+                    cursor:'nwse-resize',zIndex:7,
+                    background:'linear-gradient(135deg,transparent 45%,rgba(0,255,170,0.9) 45%)',
+                    pointerEvents:'all'}}/>
+              </div>
+            ))}
           </div>
           </div>
           {!mapLoaded&&(
@@ -2664,6 +2821,48 @@ function PropertyCanvas({isPro,onPaywall,address}:{isPro:boolean;onPaywall:()=>v
           )}
         </div>
       </div>
+
+      {/* Blueprint block detail (tap to open) */}
+      {openBlockId&&(()=>{
+        const blk=blocks.find(b=>b.id===openBlockId);
+        if(!blk)return null;
+        return(
+          <div onClick={()=>setOpenBlockId(null)} style={{position:'fixed',inset:0,zIndex:9000,
+            background:'rgba(4,14,8,0.82)',backdropFilter:'blur(6px)',display:'flex',
+            alignItems:'center',justifyContent:'center',padding:20}}>
+            <div onClick={e=>e.stopPropagation()} style={{width:'100%',maxWidth:420,maxHeight:'80vh',
+              display:'flex',flexDirection:'column',
+              background:'linear-gradient(160deg,rgba(14,42,26,0.98),rgba(8,20,16,0.98))',
+              border:'1px solid rgba(0,255,170,0.25)',borderRadius:18,padding:'22px 22px'}}>
+              <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:14}}>
+                <span style={{fontSize:26}}>{blk.emoji}</span>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontFamily:"'Space Grotesk',sans-serif",fontWeight:800,fontSize:17,color:'#f2fffa'}}>{blk.name}</div>
+                  <div style={{fontSize:11,color:'rgba(170,240,210,0.5)'}}>{blk.type} · {blk.tiles.length} tiles · {blk.w}×{blk.h} on canvas</div>
+                </div>
+              </div>
+              {/* Full tile preview */}
+              <div style={{flex:1,overflowY:'auto',display:'grid',
+                gridTemplateColumns:`repeat(${Math.min(blk.gridCols,10)},1fr)`,gap:3,
+                padding:10,background:'rgba(0,0,0,0.25)',borderRadius:10,marginBottom:14}}>
+                {blk.tiles.map((t,ti)=>(
+                  <div key={ti} style={{aspectRatio:'1',display:'flex',alignItems:'center',
+                    justifyContent:'center',fontSize:16,background:'rgba(0,255,170,0.04)',
+                    borderRadius:5}}>{t.icon}</div>
+                ))}
+              </div>
+              <div style={{display:'flex',gap:10}}>
+                <button onClick={()=>removeBlock(blk.id)} style={{flex:1,padding:'11px',borderRadius:10,
+                  cursor:'pointer',background:'rgba(255,80,80,0.1)',border:'1px solid rgba(255,80,80,0.3)',
+                  color:'#ff8080',fontWeight:700,fontSize:13}}>Remove from canvas</button>
+                <button onClick={()=>setOpenBlockId(null)} style={{padding:'11px 20px',borderRadius:10,
+                  cursor:'pointer',background:'rgba(0,255,170,0.1)',border:'1px solid rgba(0,255,170,0.3)',
+                  color:'#00ffaa',fontWeight:700,fontSize:13}}>Close</button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Save dialog */}
       {showSaveDialog&&(
@@ -10260,6 +10459,7 @@ export default function TerraForgeHome(){
                   isPro={isPro}
                   onPaywall={()=>setPaywallFeature('Property Canvas')}
                   address={propertyAddress}
+                  blueprints={blueprints}
                 />
               </div>
             )}
