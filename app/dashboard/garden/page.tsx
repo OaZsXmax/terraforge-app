@@ -2392,6 +2392,17 @@ function PropertyCanvas({isPro,onPaywall,address}:{isPro:boolean;onPaywall:()=>v
 
   function handleCellClick(i:number){
     if(!placingMode)return;
+    if(isMobileCanvas){
+      // Mobile: tapping a filled cell removes it (toggle) — reliable erase
+      // since a tile usually stays selected. Empty cell places the selection.
+      setCells(p=>{
+        if(p[i]){const n={...p};delete n[i];return n;}
+        if(selected)return{...p,[i]:{emoji:selected.emoji,name:selected.name}};
+        return p;
+      });
+      return;
+    }
+    // Desktop: original behaviour — place if a tile is selected, else erase.
     if(selected) setCells(p=>({...p,[i]:{emoji:selected.emoji,name:selected.name}}));
     else setCells(p=>{const n={...p};delete n[i];return n;});
   }
@@ -2466,7 +2477,7 @@ function PropertyCanvas({isPro,onPaywall,address}:{isPro:boolean;onPaywall:()=>v
           display:'flex',alignItems:'center',gap:6,lineHeight:1.4}}>
           <span style={{fontSize:13}}>{placingMode?'✏️':'🖐'}</span>
           <span>{placingMode
-            ?'Placing mode — pick a tile below, then tap a grid square. Tap an empty cell with no tile selected to erase.'
+            ?'Placing mode — pick a tile, then tap a grid square to place it. Tap any placed tile to remove it.'
             :'Navigate mode — drag to pan/zoom the map. Tap the Navigate button to switch to Placing.'}</span>
         </div>
       )}
@@ -2506,7 +2517,8 @@ function PropertyCanvas({isPro,onPaywall,address}:{isPro:boolean;onPaywall:()=>v
           </div>
           <div style={{flex:1,overflowY:isMobileCanvas?'hidden':'auto',overflowX:isMobileCanvas?'auto':'hidden',
             display:isMobileCanvas?'flex':'block',flexDirection:isMobileCanvas?'row':'column',
-            gap:isMobileCanvas?6:0,padding:'2px 6px 12px',WebkitOverflowScrolling:'touch'}}>
+            gap:isMobileCanvas?6:0,padding:'2px 6px 12px',WebkitOverflowScrolling:'touch',
+            touchAction:isMobileCanvas?'pan-x':'pan-y'}}>
             {CANVAS_TILES.filter(t=>t.cat===activeCat).map(tile=>{
               const isSel=selected?.emoji===tile.emoji&&selected?.name===tile.name;
               return(
