@@ -6416,6 +6416,12 @@ export default function TerraForgeHome(){
     const{data:{subscription}}=supabase.auth.onAuthStateChange((_,session)=>{setSupaUser(session?.user??null);setSupaSession(session);});
     return()=>subscription.unsubscribe();
   },[]);
+  // Register for native push notifications once the user is logged in.
+  // No-ops on the web build; only runs inside the Capacitor Android app.
+  useEffect(()=>{
+    if(!supaUser?.id)return;
+    import('@/lib/push').then(({registerPush})=>registerPush(supaUser.id)).catch(()=>{});
+  },[supaUser?.id]);
   const isLoggedIn = mounted && !!supaUser;
   const[apiBlueprint,setApiBlueprint]=useState<any>(null);
   const[isMobile,   setIsMobile]   = useState(false);

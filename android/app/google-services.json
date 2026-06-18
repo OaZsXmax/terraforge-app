@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "739520260096",
+    "project_id": "terraforge-f482c",
+    "storage_bucket": "terraforge-f482c.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:739520260096:android:f69c8be2bdc442e47a10e5",
+        "android_client_info": {
+          "package_name": "com.terraforge.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAE9Dpw03IcSSQwo6HVAuSZ_KZPoZDy9bQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
