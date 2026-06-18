@@ -1,17 +1,16 @@
 // app/api/push/send/route.ts
 // Server endpoint that sends a push notification to a user's devices via FCM.
-// Auth: requires the caller's Supabase access token (Bearer). A user can only
-// trigger a test to their OWN devices here; broadcast/cron sending is separate.
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import admin from 'firebase-admin';
+import { initializeApp, getApps, cert } from 'firebase-admin/app';
+import { getMessaging } from 'firebase-admin/messaging';
 
 // ---- Initialise the Firebase Admin SDK once (reused across invocations) ----
-function getAdmin() {
-  if (!admin.apps.length) {
-    admin.initializeApp({
-      credential: admin.credential.cert({
+function ensureFirebase() {
+  if (getApps().length === 0) {
+    initializeApp({
+      credential: cert({
         projectId: process.env.FIREBASE_PROJECT_ID,
         clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
         // Vercel stores the key with literal \n — turn them into real newlines.
@@ -19,7 +18,6 @@ function getAdmin() {
       }),
     });
   }
-  return admin;
 }
 
 // Service-role Supabase client (server only) to read tokens past RLS.
@@ -66,9 +64,9 @@ export async function POST(req: NextRequest) {
     }
 
     // --- Send to every token via FCM ---
-    const fb = getAdmin();
+    ensureFirebase();
     const tokenList = tokens.map((t) => t.token);
-    const res = await fb.messaging().sendEachForMulticast({
+    const res = await getMessaging().sendEachForMulticast({
       tokens: tokenList,
       notification: { title, body: message },
       android: { priority: 'high', notification: { channelId: 'default' } },
