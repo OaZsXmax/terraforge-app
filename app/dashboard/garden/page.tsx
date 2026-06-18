@@ -717,6 +717,11 @@ html,body{max-width:100vw;overflow-x:hidden;}
   .tf-canvas-strip{touch-action:pan-x !important;overflow-x:auto !important;overflow-y:hidden !important;
     -webkit-overflow-scrolling:touch !important;white-space:nowrap !important;
     max-width:100% !important;width:100% !important;display:block !important;}
+
+  /* iOS auto-zooms on focus for any field with font-size < 16px and often
+     fails to zoom back out. Forcing 16px on all form fields prevents the zoom
+     entirely. transform:scale keeps the visual size if a field looked smaller. */
+  input,textarea,select{font-size:16px !important;}
 }
 `;
 
