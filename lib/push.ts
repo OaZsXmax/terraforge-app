@@ -10,7 +10,6 @@ let _registered = false;
 /** True only inside the native Capacitor shell (the installed Android app). */
 function isNative(): boolean {
   try {
-    // Capacitor injects window.Capacitor in the native WebView.
     const cap = (window as any)?.Capacitor;
     return !!cap?.isNativePlatform?.();
   } catch {
@@ -25,21 +24,40 @@ function isNative(): boolean {
  */
 export async function registerPush(userId: string): Promise<void> {
   if (_registered) return;
-  if (!isNative()) return;          // web build — nothing to do
+  if (!isNative()) return;
   if (!userId) return;
 
   let PushNotifications: any;
   try {
-    // Dynamic import so the web bundle never tries to resolve the native plugin.
     ({ PushNotifications } = await import('@capacitor/push-notifications'));
   } catch {
-    return; // plugin not present (web) — silently skip
+    return;
   }
 
   try {
-    // Ask permission (Android 13+ requires the runtime prompt).
-    const perm = await PushNotifications.requestPermissions();
-    if (perm.receive !== 'granted') return;
+    // Create the Android notification channel FIRST. On Android 8+ a
+    // notification posted to a non-existent channel is silently dropped,
+    // so the channel must exist before any notification arrives.
+    try {
+      await PushNotifications.createChannel({
+        id: 'default',
+        name: 'General',
+        description: 'TerraForge notifications',
+        importance: 5, // IMPORTANCE_HIGH — shows as a heads-up banner
+        visibility: 1, // VISIBILITY_PUBLIC
+        lights: true,
+        vibration: true,
+      });
+    } catch {
+      /* createChannel is a no-op on older Android; ignore failures */
+    }
+
+    // Check existing permission, then request if needed (Android 13+ prompt).
+    let permState = await PushNotifications.checkPermissions();
+    if (permState.receive === 'prompt' || permState.receive === 'prompt-with-rationale') {
+      permState = await PushNotifications.requestPermissions();
+    }
+    if (permState.receive !== 'granted') return;
 
     // Kick off FCM registration.
     await PushNotifications.register();
@@ -65,9 +83,8 @@ export async function registerPush(userId: string): Promise<void> {
       /* registration failed — non-fatal, will retry next launch */
     });
 
-    // Foreground notifications: optional handling if you want in-app display.
     PushNotifications.addListener('pushNotificationReceived', () => {
-      /* no-op: Android shows it in the tray automatically */
+      /* foreground receipt — Android shows backgrounded ones in the tray */
     });
 
     _registered = true;
