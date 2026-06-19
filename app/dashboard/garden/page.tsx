@@ -11135,6 +11135,8 @@ export default function TerraForgeHome(){
                 {href:'/permaculture-design',label:'Permaculture Design'},
                 {href:'/food-forest-planner',label:'Food Forest Planner'},
                 {href:'/seasonal-planting-calendar',label:'Planting Calendar'},
+                {href:'/privacy',label:'Privacy Policy'},
+                {href:'/terms',label:'Terms of Service'},
               ].map(l=>(
                 <a key={l.href} href={l.href}
                   style={{fontSize:11,color:'rgba(0,255,170,0.55)',textDecoration:'none',
