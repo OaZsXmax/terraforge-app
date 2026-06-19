@@ -128,6 +128,19 @@ export async function GET(req: NextRequest) {
   const job = searchParams.get('job');
 
   try {
+    // Combined daily job — runs day3 and pro_nudge together so we stay within
+    // the Hobby plan's 2-cron limit. (Both previously ran daily, an hour apart.)
+    if (job === 'daily') {
+      const day3 = await runDay3Nudge();
+      const proNudge = await runProNudge();
+      return NextResponse.json({
+        ok: true,
+        job: 'daily',
+        day3Sent: day3.length,
+        proNudgeSent: proNudge.length,
+        results: { day3, proNudge },
+      });
+    }
     if (job === 'day3') {
       const results = await runDay3Nudge();
       return NextResponse.json({ ok: true, job: 'day3', sent: results.length, results });
@@ -140,7 +153,7 @@ export async function GET(req: NextRequest) {
       const results = await runSeasonalReminders();
       return NextResponse.json({ ok: true, job: 'seasonal', sent: results.length, results });
     }
-    return NextResponse.json({ error: 'Unknown job. Use ?job=day3|pro_nudge|seasonal' }, { status: 400 });
+    return NextResponse.json({ error: 'Unknown job. Use ?job=daily|day3|pro_nudge|seasonal' }, { status: 400 });
   } catch (err: any) {
     console.error('[email/cron]', err);
     return NextResponse.json({ error: err.message }, { status: 500 });
